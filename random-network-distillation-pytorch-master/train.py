@@ -29,7 +29,7 @@ def main(run_id=0, checkpoint=None):
 
     env.close()
 
-    is_load_model = checkpoint is None
+    is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_run{}.model'.format(env_id, run_id)
     predictor_path = 'models/{}_run{}.pred'.format(env_id, run_id)
