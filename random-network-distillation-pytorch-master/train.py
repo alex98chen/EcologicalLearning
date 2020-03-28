@@ -9,7 +9,7 @@ from tensorboardX import SummaryWriter
 import numpy as np
 
 
-def main():
+def main(run_id=0, checkpoint=None):
     print({section: dict(config[section]) for section in config.sections()})
     train_method = default_config['TrainMethod']
     env_id = default_config['EnvID']
@@ -29,11 +29,11 @@ def main():
 
     env.close()
 
-    is_load_model = True
+    is_load_model = checkpoint is None
     is_render = False
-    model_path = 'models/{}.model'.format(env_id)
-    predictor_path = 'models/{}.pred'.format(env_id)
-    target_path = 'models/{}.target'.format(env_id)
+    model_path = 'models/{}_run{}.model'.format(env_id, run_id)
+    predictor_path = 'models/{}_run{}.pred'.format(env_id, run_id)
+    target_path = 'models/{}_run{}.target'.format(env_id, run_id)
 
     writer = SummaryWriter()
 
@@ -285,4 +285,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
+    parser.add_argument('--checkpoint', help='checkpoint file', default=None)
+    args = parser.parse_args()
+    main(run_id=args.run_id,
+         checkpoint=args.checkpoint)
