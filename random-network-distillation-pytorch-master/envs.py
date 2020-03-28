@@ -8,7 +8,8 @@ from collections import deque
 from copy import copy
 
 import gym_super_mario_bros
-from nes_py.wrappers import BinarySpaceToDiscreteSpaceEnv
+# from nes_py.wrappers import BinarySpaceToDiscreteSpaceEnv
+from nes_py.wrappers import JoypadSpace
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT
 
 from torch.multiprocessing import Pipe, Process
@@ -222,7 +223,9 @@ class MarioEnvironment(Process):
             p=0.25):
         super(MarioEnvironment, self).__init__()
         self.daemon = True
-        self.env = BinarySpaceToDiscreteSpaceEnv(
+        # self.env = BinarySpaceToDiscreteSpaceEnv(
+        #     gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
+        self.env = JoypadSpace(
             gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
 
         self.is_render = is_render
