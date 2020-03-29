@@ -241,7 +241,7 @@ class UnFlatten(nn.Module):
 
 
 class VAE(nn.Module):
-    def __init__(self, input_size, z_dim=32):
+    def __init__(self, input_size, z_dim=128):
         super(VAE, self).__init__()
 
         self.input_size = input_size
@@ -299,9 +299,8 @@ class VAE(nn.Module):
 
     def reparameterize(self, mu, logvar):
         std = logvar.mul(0.5).exp_()
-        # return torch.normal(mu, std)
-        esp = torch.randn(*mu.size())
-        z = mu + std * esp
+        eps = torch.randn_like(mu)
+        z = mu + std * eps
         return z
 
     def bottleneck(self, h):

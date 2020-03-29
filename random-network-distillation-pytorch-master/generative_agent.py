@@ -7,7 +7,7 @@ import torch.optim as optim
 
 from torch.distributions.categorical import Categorical
 
-from model import CnnActorCriticNetwork, RNDModel
+from model import CnnActorCriticNetwork, VAE
 from utils import global_grad_norm_
 
 
@@ -46,10 +46,10 @@ class GenerativeAgent(object):
         self.update_proportion = update_proportion
         self.device = torch.device('cuda' if use_cuda else 'cpu')
 
-        self.rnd = RNDModel(input_size, output_size)
-        self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.rnd.predictor.parameters()),
+        self.vae = VAE(input_size)
+        self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.vae.parameters()),
                                     lr=learning_rate)
-        self.rnd = self.rnd.to(self.device)
+        self.vae = self.vae.to(self.device)
 
         self.model = self.model.to(self.device)
 
@@ -71,9 +71,12 @@ class GenerativeAgent(object):
     def compute_intrinsic_reward(self, next_obs):
         next_obs = torch.FloatTensor(next_obs).to(self.device)
 
-        target_next_feature = self.rnd.target(next_obs)
-        predict_next_feature = self.rnd.predictor(next_obs)
-        intrinsic_reward = (target_next_feature - predict_next_feature).pow(2).sum(1) / 2
+        gen_next_obs = self.vae(next_obs)[0]
+
+        # TODO: do we need to average this across the dimensions of the image? or is this done
+        # at reward normalization?
+        d = len(next_obs.shape)
+        intrinsic_reward = (next_obs - gen_next_obs).pow(2).sum(axis=list(range(1, d))) / 2
 
         return intrinsic_reward.data.cpu().numpy()
 
@@ -86,7 +89,7 @@ class GenerativeAgent(object):
         next_obs_batch = torch.FloatTensor(next_obs_batch).to(self.device)
 
         sample_range = np.arange(len(s_batch))
-        forward_mse = nn.MSELoss(reduction='none')
+        reconstruction_loss = nn.MSELoss(reduction='none')
 
         with torch.no_grad():
             policy_old_list = torch.stack(old_policy).permute(1, 0, 2).contiguous().view(-1, self.output_size).to(
@@ -102,14 +105,20 @@ class GenerativeAgent(object):
                 sample_idx = sample_range[self.batch_size * j:self.batch_size * (j + 1)]
 
                 # --------------------------------------------------------------------------------
-                # for Curiosity-driven(Random Network Distillation)
-                predict_next_state_feature, target_next_state_feature = self.rnd(next_obs_batch[sample_idx])
+                # for generative curiosity (VAE loss)
+                gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
 
-                forward_loss = forward_mse(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
-                # Proportion of exp used for predictor update
-                mask = torch.rand(len(forward_loss)).to(self.device)
+                d = len(gen_next_state.shape)
+                recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
+
+                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=list(range(1, d)))
+
+                # TODO: keep this proportion of experience used for VAE update?
+                # Proportion of experience used for VAE update
+                mask = torch.rand(len(recon_loss)).to(self.device)
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
-                forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+                recon_loss = (recon_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+                kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 # ---------------------------------------------------------------------------------
 
                 policy, value_ext, value_int = self.model(s_batch[sample_idx])
@@ -133,7 +142,7 @@ class GenerativeAgent(object):
                 entropy = m.entropy().mean()
 
                 self.optimizer.zero_grad()
-                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + forward_loss
+                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + recon_loss + kld
                 loss.backward()
-                global_grad_norm_(list(self.model.parameters())+list(self.rnd.predictor.parameters()))
+                global_grad_norm_(list(self.model.parameters())+list(self.vae.parameters()))
                 self.optimizer.step()
