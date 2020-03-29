@@ -11,7 +11,10 @@ import numpy as np
 
 def main(run_id=0, checkpoint=None):
     print({section: dict(config[section]) for section in config.sections()})
+
     train_method = default_config['TrainMethod']
+
+    # Create environment
     env_id = default_config['EnvID']
     env_type = default_config['EnvType']
 
@@ -29,6 +32,7 @@ def main(run_id=0, checkpoint=None):
 
     env.close()
 
+    # Load configuration parameters
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_run{}.model'.format(env_id, run_id)
@@ -76,6 +80,7 @@ def main(run_id=0, checkpoint=None):
     else:
         raise NotImplementedError
 
+    # Initialize agent
     agent = agent(
         input_size,
         output_size,
@@ -94,6 +99,7 @@ def main(run_id=0, checkpoint=None):
         use_noisy_net=use_noisy_net
     )
 
+    # Load pre-existing model
     if is_load_model:
         print('load model...')
         if use_cuda:
@@ -106,6 +112,7 @@ def main(run_id=0, checkpoint=None):
             agent.rnd.target.load_state_dict(torch.load(target_path, map_location='cpu'))
         print('load finished!')
 
+    # Create workers to run in environments
     works = []
     parent_conns = []
     child_conns = []
@@ -128,8 +135,8 @@ def main(run_id=0, checkpoint=None):
     global_update = 0
     global_step = 0
 
-    # normalize obs
-    print('Start to initailize observation normalization parameter.....')
+    # Initialize observation normalizers
+    print('Start to initialize observation normalization parameter.....')
     next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
     for step in range(num_step * pre_obs_norm_step):
         actions = np.random.randint(0, output_size, size=(num_worker,))
@@ -145,8 +152,9 @@ def main(run_id=0, checkpoint=None):
             next_obs = np.stack(next_obs)
             obs_rms.update(next_obs)
             next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    print('End to initalize...')
+    print('End to initialize...')
 
+    # Main training loop
     while True:
         total_state = np.zeros([num_worker * num_step, 4, 84, 84], dtype='float32')
         total_next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
@@ -155,7 +163,7 @@ def main(run_id=0, checkpoint=None):
         global_step += (num_worker * num_step)
         global_update += 1
 
-        # Step 1. n-step rollout
+        # Step 1. n-step rollout (collect data)
         for step in range(num_step):
             actions, value_ext, value_int, policy = agent.get_action(states / 255.)
 
@@ -179,7 +187,7 @@ def main(run_id=0, checkpoint=None):
             dones = np.hstack(dones)
             real_dones = np.hstack(real_dones)
 
-            # total reward = int reward + ext Reward
+            # Compute total reward = intrinsic reward + external reward
             next_obs -= obs_rms.mean
             next_obs /= np.sqrt(obs_rms.var)
             next_obs.clip(-5, 5, out=next_obs)
@@ -288,7 +296,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
-    parser.add_argument('--checkpoint', help='checkpoint file', default=None)
+    parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint)
