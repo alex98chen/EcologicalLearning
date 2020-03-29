@@ -142,7 +142,7 @@ class GenerativeAgent(object):
                 entropy = m.entropy().mean()
 
                 self.optimizer.zero_grad()
-                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + recon_loss + kld
+                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + recon_loss + kld_loss
                 loss.backward()
                 global_grad_norm_(list(self.model.parameters())+list(self.vae.parameters()))
                 self.optimizer.step()
