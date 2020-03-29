@@ -233,3 +233,87 @@ class RNDModel(nn.Module):
         predict_feature = self.predictor(next_obs)
 
         return predict_feature, target_feature
+
+
+class UnFlatten(nn.Module):
+    def forward(self, input, shape=(64, 7, 7)):
+        return input.view(input.size(0), *shape)
+
+
+class VAE(nn.Module):
+    def __init__(self, input_size, z_dim=32):
+        super(VAE, self).__init__()
+
+        self.input_size = input_size
+
+        feature_output = 7 * 7 * 64
+        self.encoder = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=8,
+                stride=4),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=4,
+                stride=2),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1),
+            nn.LeakyReLU(),
+            Flatten(),
+        )
+
+        self.fc1 = nn.Linear(feature_output, z_dim)
+        self.fc2 = nn.Linear(feature_output, z_dim)
+        self.fc3 = nn.Linear(z_dim, feature_output)
+
+        # TODO: write a different decoder???
+        self.decoder == nn.Sequential(
+            UnFlatten(),
+            nn.ConvTranspose2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1
+            ),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(
+                in_channels=64,
+                out_channels=32,
+                kernel_size=4,
+                stride=2),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(
+                in_channels=32,
+                out_channels=1,
+                kernel_size=8,
+                stride=4),
+            nn.Sigmoid()
+        )
+
+    def reparameterize(self, mu, logvar):
+        std = logvar.mul(0.5).exp_()
+        # return torch.normal(mu, std)
+        esp = torch.randn(*mu.size())
+        z = mu + std * esp
+        return z
+
+    def bottleneck(self, h):
+        mu, logvar = self.fc1(h), self.fc2(h)
+        z = self.reparameterize(mu, logvar)
+        return z, mu, logvar
+
+    def representation(self, x):
+        return self.bottleneck(self.encoder(x))[0]
+
+    def forward(self, x):
+        h = self.encoder(x)
+        z, mu, logvar = self.bottleneck(h)
+        z = self.fc3(z)
+        return self.decoder(z), mu, logvar

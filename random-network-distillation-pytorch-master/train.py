@@ -1,4 +1,4 @@
-from agents import *
+from rnd_agent import RNDAgent
 from envs import *
 from utils import *
 from config import *
