@@ -111,7 +111,7 @@ class GenerativeAgent(object):
                 d = len(gen_next_state.shape)
                 recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
 
-                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=list(range(1, d)))
+                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update

@@ -274,7 +274,7 @@ class VAE(nn.Module):
         self.fc3 = nn.Linear(z_dim, feature_output)
 
         # TODO: write a different decoder???
-        self.decoder == nn.Sequential(
+        self.decoder = nn.Sequential(
             UnFlatten(),
             nn.ConvTranspose2d(
                 in_channels=64,

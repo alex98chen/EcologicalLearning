@@ -1,4 +1,5 @@
 from rnd_agent import RNDAgent
+from generative_agent import GenerativeAgent
 from envs import *
 from utils import *
 from config import *
@@ -71,7 +72,12 @@ def main(run_id=0, checkpoint=None):
     pre_obs_norm_step = int(default_config['ObsNormStep'])
     discounted_reward = RewardForwardFilter(int_gamma)
 
-    agent = RNDAgent
+    if train_method == 'RND':
+        agent = RNDAgent
+    elif train_method == 'generative':
+        agent = GenerativeAgent
+    else:
+        raise NotImplementedError
 
     if default_config['EnvType'] == 'atari':
         env_type = AtariEnvironment
