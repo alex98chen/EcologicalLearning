@@ -138,7 +138,7 @@ class Decoder(nn.Module):
         main.add_module('final-{0}-{1}-convt'.format(cngf, nc),
                         nn.ConvTranspose2d(cngf, nc, 4, 2, 1, bias=False))
         main.add_module('final-{0}-tanh'.format(nc),
-                        nn.Tanh())
+                        nn.Sigmoid())
         self.main = main
 
     def forward(self, input):

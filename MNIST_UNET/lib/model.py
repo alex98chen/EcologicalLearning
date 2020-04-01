@@ -9,6 +9,7 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
+np.set_printoptions(threshold=1e6)
 
 from torch.autograd import Variable
 import torch.optim as optim
@@ -196,18 +197,22 @@ class MNIST_UNET(nn.Module):
 
     def save_images(self, real, fake, step):
         N, C, W, H = real.shape
-        stitch_images = torch.zeros((C, W*N, 3*H))
+        stitch_images = np.zeros((C, W*N, 3*H))
         image_dir = os.path.join(self.opt.resume, 'images')
         if not os.path.exists(image_dir): os.makedirs(image_dir)
         for i in range(N):
-            real_img = (real[i, :, :, :] * 255).to(torch.uint8)
-            fake_img = (fake[i, :, :, :] * 255).to(torch.uint8)
-            mask_img = (real_img - fake_img)
-            stitch_images[:, W*i: W*i+W, :H] = real_img
-            stitch_images[:, W*i: W*i+W, H:2*H] = fake_img
+            real_img = (real[i, :, :, :] * 255).to('cpu').numpy().astype(np.int)
+            fake_img = (fake[i, :, :, :] * 255).to('cpu').numpy().astype(np.int)
+            mask_img = np.abs(real_img - fake_img).astype(np.uint8)
+            print(np.min(real_img))
+            print(np.max(real_img))
+            stitch_images[:, W*i: W*i+W, :H] = real_img.astype(np.uint8)
+            stitch_images[:, W*i: W*i+W, H:2*H] = fake_img.astype(np.uint8)
+            print(np.min(fake_img))
+            print(np.max(fake_img))
             stitch_images[:, W*i: W*i+W, 2*H:] = mask_img
         stitch_images = stitch_images.squeeze(0)
-        stitch_images = stitch_images.numpy()
+        #stitch_images = stitch_images.numpy()
         plt.imsave(os.path.join(image_dir, '%s.png'%(step+1)), stitch_images, cmap='gray')
 
     def draw_reward(self):

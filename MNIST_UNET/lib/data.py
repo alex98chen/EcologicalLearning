@@ -40,7 +40,7 @@ def load_data(opt):
             [
                 transforms.Resize(opt.isize),
                 transforms.ToTensor(),
-                transforms.Normalize((0.1307, ), (0.3801, ))
+                #transforms.Normalize((0.1307, ), (0.3801, ))
             ]
         )
 
