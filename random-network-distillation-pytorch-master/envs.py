@@ -187,7 +187,8 @@ class AtariEnvironment(Environment):
                 self.history = self.reset()
 
             self.child_conn.send(
-                [self.history[:, :, :], reward, force_done, done, log_reward])
+                [self.history[:, :, :], reward, force_done, done, log_reward,
+                 [self.rall, self.steps]])
 
     def reset(self):
         self.last_action = 0

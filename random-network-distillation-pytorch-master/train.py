@@ -1,13 +1,13 @@
+import pickle
+import numpy as np
+from tensorboardX import SummaryWriter
+from torch.multiprocessing import Pipe
+
 from rnd_agent import RNDAgent
 from generative_agent import GenerativeAgent
 from envs import *
 from utils import *
 from config import *
-from torch.multiprocessing import Pipe
-
-from tensorboardX import SummaryWriter
-
-import numpy as np
 
 
 def main(run_id=0, checkpoint=None):
@@ -20,7 +20,10 @@ def main(run_id=0, checkpoint=None):
     env_type = default_config['EnvType']
 
     if env_type == 'mario':
-        env = BinarySpaceToDiscreteSpaceEnv(gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
+        print('Mario environment not fully implemented - thomaseh')
+        raise NotImplementedError
+        env = BinarySpaceToDiscreteSpaceEnv(
+            gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
     elif env_type == 'atari':
         env = gym.make(env_id)
     else:
@@ -50,6 +53,7 @@ def main(run_id=0, checkpoint=None):
     num_worker = int(default_config['NumEnv'])
 
     num_step = int(default_config['NumStep'])
+    num_rollouts = int(default_config['NumRollouts'])
 
     ppo_eps = float(default_config['PPOEps'])
     epoch = int(default_config['Epoch'])
@@ -113,9 +117,12 @@ def main(run_id=0, checkpoint=None):
             agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
             agent.rnd.target.load_state_dict(torch.load(target_path))
         else:
-            agent.model.load_state_dict(torch.load(model_path, map_location='cpu'))
-            agent.rnd.predictor.load_state_dict(torch.load(predictor_path, map_location='cpu'))
-            agent.rnd.target.load_state_dict(torch.load(target_path, map_location='cpu'))
+            agent.model.load_state_dict(
+                torch.load(model_path, map_location='cpu'))
+            agent.rnd.predictor.load_state_dict(
+                torch.load(predictor_path, map_location='cpu'))
+            agent.rnd.target.load_state_dict(
+                torch.load(target_path, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -124,8 +131,10 @@ def main(run_id=0, checkpoint=None):
     child_conns = []
     for idx in range(num_worker):
         parent_conn, child_conn = Pipe()
-        work = env_type(env_id, is_render, idx, child_conn, sticky_action=sticky_action, p=action_prob,
-                        life_done=life_done)
+        work = env_type(
+            env_id, is_render, idx, child_conn, sticky_action=sticky_action,
+            p=action_prob, life_done=life_done,
+        )
         work.start()
         works.append(work)
         parent_conns.append(parent_conn)
@@ -142,7 +151,7 @@ def main(run_id=0, checkpoint=None):
     global_step = 0
 
     # Initialize observation normalizers
-    print('Start to initialize observation normalization parameter.....')
+    print('Start to initialize observation normalization parameter...')
     next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
     for step in range(num_step * pre_obs_norm_step):
         actions = np.random.randint(0, output_size, size=(num_worker,))
@@ -151,7 +160,7 @@ def main(run_id=0, checkpoint=None):
             parent_conn.send(action)
 
         for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr = parent_conn.recv()
+            s, r, d, rd, lr, _ = parent_conn.recv()
             next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
         if (step % num_step) == num_step - 1:
@@ -160,18 +169,25 @@ def main(run_id=0, checkpoint=None):
             next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
     print('End to initialize...')
 
+    # Initialize stats dict
+    stats = {
+        'total_reward': [],
+        'ep_length': [],
+        'num_updates': [],
+        'frames_seen': [],
+    }
+
     # Main training loop
     while True:
         total_state = np.zeros([num_worker * num_step, 4, 84, 84], dtype='float32')
         total_next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-        total_reward, total_done, total_next_state, total_action, total_int_reward, total_ext_values, total_int_values, total_policy, total_policy_np = \
-            [], [], [], [], [], [], [], [], []
-        global_step += (num_worker * num_step)
-        global_update += 1
+        total_reward, total_done, total_next_state, total_action, \
+            total_int_reward, total_ext_values, total_int_values, total_policy, \
+            total_policy_np = [], [], [], [], [], [], [], [], []
 
         # Step 1. n-step rollout (collect data)
         for step in range(num_step):
-            actions, value_ext, value_int, policy = agent.get_action(states / 255.)
+            actions, value_ext, value_int, policy = agent.get_action(states/255.)
 
             for parent_conn, action in zip(parent_conns, actions):
                 parent_conn.send(action)
@@ -180,7 +196,7 @@ def main(run_id=0, checkpoint=None):
             next_states = np.zeros([num_worker, 4, 84, 84])
             rewards, dones, real_dones, log_rewards = [], [], [], []
             for idx, parent_conn in enumerate(parent_conns):
-                s, r, d, rd, lr = parent_conn.recv()
+                s, r, d, rd, lr, stat = parent_conn.recv()
                 next_states[idx] = s
                 rewards.append(r)
                 dones.append(d)
@@ -188,6 +204,12 @@ def main(run_id=0, checkpoint=None):
                 log_rewards.append(lr)
                 next_obs[idx, 0] = s[3, :, :]
                 total_next_obs[idx * num_step + step, 0] = s[3, :, :]
+
+                if rd:
+                    stats['total_reward'].append(stat[0])
+                    stats['ep_length'].append(stat[1])
+                    stats['num_updates'].append(global_update)
+                    stats['frames_seen'].append(global_step)
 
             rewards = np.hstack(rewards)
             dones = np.hstack(dones)
@@ -291,11 +313,22 @@ def main(run_id=0, checkpoint=None):
         agent.train_model(total_state, ext_target, int_target, total_action,
                           total_adv, total_next_obs, total_policy)
 
-        if global_step % (num_worker * num_step * 100) == 0:
-            print('Now Global Step :{}'.format(global_step))
+        global_step += (num_worker * num_step)
+        global_update += 1
+        if global_update % 100 == 0:
+            print('Saving model at global step={}, num rollouts={}.'.format(
+                global_step, global_update))
             torch.save(agent.model.state_dict(), model_path)
             torch.save(agent.rnd.predictor.state_dict(), predictor_path)
             torch.save(agent.rnd.target.state_dict(), target_path)
+
+            # Save stats to pickle file
+            with open('models/stats.pkl','wb') as f:
+                pickle.dump(stats, f)
+
+        if global_update == num_rollouts:
+            print('Finished Training.')
+            break
 
 
 if __name__ == '__main__':
