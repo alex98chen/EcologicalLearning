@@ -40,8 +40,12 @@ def main(run_id=0, checkpoint=None):
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_run{}.model'.format(env_id, run_id)
-    predictor_path = 'models/{}_run{}.pred'.format(env_id, run_id)
-    target_path = 'models/{}_run{}.target'.format(env_id, run_id)
+    if train_method == 'RND':
+        predictor_path = 'models/{}_run{}.pred'.format(env_id, run_id)
+        target_path = 'models/{}_run{}.target'.format(env_id, run_id)
+    elif train_method == 'generative':
+        predictor_path = 'models/{}_run{}.vae'.format(env_id, run_id)
+   
 
     writer = SummaryWriter()
 
@@ -114,15 +118,21 @@ def main(run_id=0, checkpoint=None):
         print('load model...')
         if use_cuda:
             agent.model.load_state_dict(torch.load(model_path))
-            agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
-            agent.rnd.target.load_state_dict(torch.load(target_path))
+            if train_method == 'RND':
+                agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
+                agent.rnd.target.load_state_dict(torch.load(target_path))
+            elif train_method == 'generative':
+                agent.vae.load_state_dict(torch.load(predictor_path))
         else:
             agent.model.load_state_dict(
                 torch.load(model_path, map_location='cpu'))
-            agent.rnd.predictor.load_state_dict(
-                torch.load(predictor_path, map_location='cpu'))
-            agent.rnd.target.load_state_dict(
-                torch.load(target_path, map_location='cpu'))
+            if train_method == 'RND':
+                agent.rnd.predictor.load_state_dict(
+                    torch.load(predictor_path, map_location='cpu'))
+                agent.rnd.target.load_state_dict(
+                    torch.load(target_path, map_location='cpu'))
+            elif train_method == 'generative':
+                agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -319,8 +329,11 @@ def main(run_id=0, checkpoint=None):
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path)
-            torch.save(agent.rnd.predictor.state_dict(), predictor_path)
-            torch.save(agent.rnd.target.state_dict(), target_path)
+            if train_method == 'RND':
+                torch.save(agent.rnd.predictor.state_dict(), predictor_path)
+                torch.save(agent.rnd.target.state_dict(), target_path)
+            elif train_method == 'generative':
+                torch.save(agent.vae.state_dict(), predictor_path)
 
             # Save stats to pickle file
             with open('models/stats.pkl','wb') as f:

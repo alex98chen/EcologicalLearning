@@ -68,16 +68,14 @@ class GenerativeAgent(object):
         r = np.expand_dims(np.random.rand(p.shape[1 - axis]), axis=axis)
         return (p.cumsum(axis=axis) > r).argmax(axis=axis)
 
-    def compute_intrinsic_reward(self, next_obs):
-        next_obs = torch.FloatTensor(next_obs).to(self.device)
+    def compute_intrinsic_reward(self, obs):
+        obs = torch.FloatTensor(obs).to(self.device)
+        embedding = self.vae.representation(obs)
+        reconstructed_embedding = self.vae.representation(self.vae(obs)[0])
 
-        gen_next_obs = self.vae(next_obs)[0]
+        intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
 
-        # TODO: do we need to average this across the dimensions of the image? or is this done
-        # at reward normalization?
-        d = len(next_obs.shape)
-        intrinsic_reward = (next_obs - gen_next_obs).pow(2).sum(axis=list(range(1, d))) / 2
-
+        # TODO: Does the "data.cpu().numpy()" part mean we do not have to do with torch.no_grad()?
         return intrinsic_reward.data.cpu().numpy()
 
     def train_model(self, s_batch, target_ext_batch, target_int_batch, y_batch, adv_batch, next_obs_batch, old_policy):
