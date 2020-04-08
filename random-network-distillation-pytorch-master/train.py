@@ -162,21 +162,21 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
     # Initialize observation normalizers
     print('Start to initialize observation normalization parameter...')
-    # next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    # for step in range(num_step * pre_obs_norm_step):
-    #     actions = np.random.randint(0, output_size, size=(num_worker,))
+    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    for step in range(num_step * pre_obs_norm_step):
+        actions = np.random.randint(0, output_size, size=(num_worker,))
 
-    #     for parent_conn, action in zip(parent_conns, actions):
-    #         parent_conn.send(action)
+        for parent_conn, action in zip(parent_conns, actions):
+            parent_conn.send(action)
 
-    #     for idx, parent_conn in enumerate(parent_conns):
-    #         s, r, d, rd, lr, _ = parent_conn.recv()
-    #         next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+        for idx, parent_conn in enumerate(parent_conns):
+            s, r, d, rd, lr, _ = parent_conn.recv()
+            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
-    #     if (step % num_step) == num_step - 1:
-    #         next_obs = np.stack(next_obs)
-    #         obs_rms.update(next_obs)
-    #         next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+        if (step % num_step) == num_step - 1:
+            next_obs = np.stack(next_obs)
+            obs_rms.update(next_obs)
+            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
     print('End to initialize...')
 
     # Initialize stats dict
@@ -330,13 +330,13 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
             if train_method == 'RND':
-                torch.save(agent.rnd.predictor.state_dict(), predictor_path + "_{}.pt".format(global_update))
-                torch.save(agent.rnd.target.state_dict(), target_path + "_{}.pt".format(global_update))
+                torch.save(agent.rnd.predictor.state_dict(), predictor_path + '_{}.pt'.format(global_update))
+                torch.save(agent.rnd.target.state_dict(), target_path + '_{}.pt'.format(global_update))
             elif train_method == 'generative':
-                torch.save(agent.vae.state_dict(), predictor_path + "_{}.pt".format(global_update))
+                torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
-            with open('models/stats.pkl','wb') as f:
+            with open('models/stats_{}.pkl'.format(global_update),'wb') as f:
                 pickle.dump(stats, f)
 
         if global_update == num_rollouts:
