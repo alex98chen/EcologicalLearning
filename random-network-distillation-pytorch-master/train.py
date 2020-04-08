@@ -10,7 +10,7 @@ from utils import *
 from config import *
 
 
-def main(run_id=0, checkpoint=None):
+def main(run_id=0, checkpoint=None, save_interval=1000):
     print({section: dict(config[section]) for section in config.sections()})
 
     train_method = default_config['TrainMethod']
@@ -39,12 +39,12 @@ def main(run_id=0, checkpoint=None):
     # Load configuration parameters
     is_load_model = checkpoint is not None
     is_render = False
-    model_path = 'models/{}_run{}.model'.format(env_id, run_id)
+    model_path = 'models/{}_run{}_model'.format(env_id, run_id)
     if train_method == 'RND':
-        predictor_path = 'models/{}_run{}.pred'.format(env_id, run_id)
-        target_path = 'models/{}_run{}.target'.format(env_id, run_id)
+        predictor_path = 'models/{}_run{}_pred'.format(env_id, run_id)
+        target_path = 'models/{}_run{}_target'.format(env_id, run_id)
     elif train_method == 'generative':
-        predictor_path = 'models/{}_run{}.vae'.format(env_id, run_id)
+        predictor_path = 'models/{}_run{}_vae'.format(env_id, run_id)
    
 
     writer = SummaryWriter()
@@ -162,21 +162,21 @@ def main(run_id=0, checkpoint=None):
 
     # Initialize observation normalizers
     print('Start to initialize observation normalization parameter...')
-    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    for step in range(num_step * pre_obs_norm_step):
-        actions = np.random.randint(0, output_size, size=(num_worker,))
+    # next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    # for step in range(num_step * pre_obs_norm_step):
+    #     actions = np.random.randint(0, output_size, size=(num_worker,))
 
-        for parent_conn, action in zip(parent_conns, actions):
-            parent_conn.send(action)
+    #     for parent_conn, action in zip(parent_conns, actions):
+    #         parent_conn.send(action)
 
-        for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr, _ = parent_conn.recv()
-            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+    #     for idx, parent_conn in enumerate(parent_conns):
+    #         s, r, d, rd, lr, _ = parent_conn.recv()
+    #         next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
-        if (step % num_step) == num_step - 1:
-            next_obs = np.stack(next_obs)
-            obs_rms.update(next_obs)
-            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    #     if (step % num_step) == num_step - 1:
+    #         next_obs = np.stack(next_obs)
+    #         obs_rms.update(next_obs)
+    #         next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
     print('End to initialize...')
 
     # Initialize stats dict
@@ -325,15 +325,15 @@ def main(run_id=0, checkpoint=None):
 
         global_step += (num_worker * num_step)
         global_update += 1
-        if global_update % 100 == 0:
+        if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
-            torch.save(agent.model.state_dict(), model_path)
+            torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
             if train_method == 'RND':
-                torch.save(agent.rnd.predictor.state_dict(), predictor_path)
-                torch.save(agent.rnd.target.state_dict(), target_path)
+                torch.save(agent.rnd.predictor.state_dict(), predictor_path + "_{}.pt".format(global_update))
+                torch.save(agent.rnd.target.state_dict(), target_path + "_{}.pt".format(global_update))
             elif train_method == 'generative':
-                torch.save(agent.vae.state_dict(), predictor_path)
+                torch.save(agent.vae.state_dict(), predictor_path + "_{}.pt".format(global_update))
 
             # Save stats to pickle file
             with open('models/stats.pkl','wb') as f:
@@ -349,6 +349,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
+    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
     args = parser.parse_args()
     main(run_id=args.run_id,
-         checkpoint=args.checkpoint)
+         checkpoint=args.checkpoint,
+         save_interval=args.save_interval)
