@@ -336,7 +336,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
                 torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
-            with open('models/stats_{}.pkl'.format(global_update),'wb') as f:
+            with open('models/{}_{}_stats_{}.pkl'.format(env_id, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
 
         if global_update == num_rollouts:
