@@ -53,6 +53,12 @@ class GenerativeAgent(object):
 
         self.model = self.model.to(self.device)
 
+    def reconstruct(self, state):
+        state = torch.Tensor(state).to(self.device)
+        state = state.float()
+        reconstructed = self.vae(state.unsqueeze(0))[0].squeeze(0)
+        return reconstructed.detach().cpu().numpy()
+
     def get_action(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
@@ -75,8 +81,7 @@ class GenerativeAgent(object):
 
         intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
 
-        # TODO: Does the "data.cpu().numpy()" part mean we do not have to do with torch.no_grad()?
-        return intrinsic_reward.data.cpu().numpy()
+        return intrinsic_reward.detach().cpu().numpy()
 
     def train_model(self, s_batch, target_ext_batch, target_int_batch, y_batch, adv_batch, next_obs_batch, old_policy):
         s_batch = torch.FloatTensor(s_batch).to(self.device)
