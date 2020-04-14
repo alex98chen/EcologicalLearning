@@ -72,6 +72,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     life_done = default_config.getboolean('LifeDone')
 
     reward_rms = RunningMeanStd()
+    obs_rms = RunningMeanStd(shape=(1, 1, 84, 84))
     pre_obs_norm_step = int(default_config['ObsNormStep'])
     discounted_reward = RewardForwardFilter(int_gamma)
 
@@ -105,7 +106,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         ppo_eps=ppo_eps,
         use_cuda=use_cuda,
         use_gae=use_gae,
-        use_noisy_net=use_noisy_net
+        use_noisy_net=use_noisy_net,
+        update_proportion=1.0
     )
 
     # Load pre-existing model
@@ -145,6 +147,25 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     global_update = 0
     global_step = 0
 
+    # Initialize observation normalizers
+    print('Start to initialize observation normalization parameter...')
+    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    for step in range(num_step * pre_obs_norm_step):
+        actions = np.random.randint(0, output_size, size=(num_worker,))
+
+        for parent_conn, action in zip(parent_conns, actions):
+            parent_conn.send(action)
+
+        for idx, parent_conn in enumerate(parent_conns):
+            s, r, d, rd, lr, _ = parent_conn.recv()
+            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+
+        if (step % num_step) == num_step - 1:
+            next_obs = np.stack(next_obs)
+            obs_rms.update(next_obs)
+            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    print('End to initialize...')
+
     # Initialize stats dict
     stats = {
         'total_reward': [],
@@ -163,7 +184,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
 
         # Step 1. n-step rollout (collect data)
         for step in range(num_step):
-            actions, value_ext, value_int, policy = agent.get_action(states/255.)
+            actions, value_ext, value_int, policy = agent.get_action(states / 255.)
 
             for parent_conn, action in zip(parent_conns, actions):
                 parent_conn.send(action)
@@ -192,7 +213,10 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
             real_dones = np.hstack(real_dones)
 
             # Compute total reward = intrinsic reward + external reward
-            intrinsic_reward = agent.compute_intrinsic_reward(next_obs / 255.)
+            next_obs -= obs_rms.mean
+            next_obs /= np.sqrt(obs_rms.var)
+            next_obs.clip(-5, 5, out=next_obs)
+            intrinsic_reward = agent.compute_intrinsic_reward(next_obs)
             intrinsic_reward = np.hstack(intrinsic_reward)
             sample_i_rall += intrinsic_reward[sample_env_idx]
 
@@ -242,6 +266,9 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         mean, std, count = np.mean(total_reward_per_env), np.std(total_reward_per_env), len(total_reward_per_env)
         reward_rms.update_from_moments(mean, std ** 2, count)
 
+        writer.add_scalar('data/raw_int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
+        writer.add_scalar('data/raw_int_reward_per_rollout', np.sum(total_int_reward) / num_worker, global_update)
+
         # normalize intrinsic reward
         total_int_reward /= np.sqrt(reward_rms.var)
         writer.add_scalar('data/int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
@@ -273,20 +300,35 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         total_adv = int_adv * int_coef + ext_adv * ext_coef
         # -----------------------------------------------
 
-        # Step 4. Training!
+        # Step 4. update obs normalize param
+        obs_rms.update(total_next_obs)
+        # -----------------------------------------------
 
-        agent.train_model(total_state / 255., ext_target, int_target, total_action,
-                          total_adv, total_next_obs / 255., total_policy)
+        # Step 5. Training!
+        random_obs_choice = np.random.randint(total_next_obs.shape[0])
+        random_obs = total_next_obs[random_obs_choice].copy()
+        total_next_obs -= obs_rms.mean
+        total_next_obs /= np.sqrt(obs_rms.var)
+        total_next_obs.clip(-5, 5, out=total_next_obs)
+        recon_losses, kld_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
+                          total_adv, total_next_obs, total_policy)
+
+        writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
+        writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
 
         global_step += (num_worker * num_step)
         
         if global_update % rec_interval == 0:
             with torch.no_grad():
-                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0])]
-                reconstructed_state = agent.reconstruct(random_state)
+                random_obs_norm = total_next_obs[random_obs_choice]
+                reconstructed_state = agent.reconstruct(random_obs_norm)
 
-                writer.add_image('Original', random_state, global_update)
-                writer.add_image('Reconstructed', reconstructed_state, global_update)
+                random_obs_norm = (random_obs_norm - random_obs_norm.min()) / (random_obs_norm.max() - random_obs_norm.min())
+                reconstructed_state = (reconstructed_state - reconstructed_state.min()) / (reconstructed_state.max() - reconstructed_state.min())
+
+                writer.add_image('Original', random_obs, global_update)
+                writer.add_image('Original Normalized', random_obs_norm, global_update)
+                writer.add_image('Reconstructed Normalized', reconstructed_state, global_update)
 
         if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
