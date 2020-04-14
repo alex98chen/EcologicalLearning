@@ -293,7 +293,8 @@ class VAE(nn.Module):
                 in_channels=32,
                 out_channels=1,
                 kernel_size=8,
-                stride=4)
+                stride=4),
+            nn.Sigmoid()
         )
 
     def reparameterize(self, mu, logvar):

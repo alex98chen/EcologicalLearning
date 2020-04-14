@@ -152,23 +152,23 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     global_step = 0
 
     # Initialize observation normalizers
-    print('Start to initialize observation normalization parameter...')
-    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    for step in range(num_step * pre_obs_norm_step):
-        actions = np.random.randint(0, output_size, size=(num_worker,))
+    # print('Start to initialize observation normalization parameter...')
+    # next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    # for step in range(num_step * pre_obs_norm_step):
+    #     actions = np.random.randint(0, output_size, size=(num_worker,))
 
-        for parent_conn, action in zip(parent_conns, actions):
-            parent_conn.send(action)
+    #     for parent_conn, action in zip(parent_conns, actions):
+    #         parent_conn.send(action)
 
-        for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr, _ = parent_conn.recv()
-            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+    #     for idx, parent_conn in enumerate(parent_conns):
+    #         s, r, d, rd, lr, _ = parent_conn.recv()
+    #         next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
-        if (step % num_step) == num_step - 1:
-            next_obs = np.stack(next_obs)
-            obs_rms.update(next_obs)
-            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    print('End to initialize...')
+    #     if (step % num_step) == num_step - 1:
+    #         next_obs = np.stack(next_obs)
+    #         obs_rms.update(next_obs)
+    #         next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    # print('End to initialize...')
 
     # Initialize stats dict
     stats = {
@@ -217,10 +217,10 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
             real_dones = np.hstack(real_dones)
 
             # Compute total reward = intrinsic reward + external reward
-            next_obs -= obs_rms.mean
-            next_obs /= np.sqrt(obs_rms.var)
-            next_obs.clip(-5, 5, out=next_obs)
-            intrinsic_reward = agent.compute_intrinsic_reward(next_obs)
+            # next_obs -= obs_rms.mean
+            # next_obs /= np.sqrt(obs_rms.var)
+            # next_obs.clip(-5, 5, out=next_obs)
+            intrinsic_reward = agent.compute_intrinsic_reward(next_obs / 255.)
             intrinsic_reward = np.hstack(intrinsic_reward)
             sample_i_rall += intrinsic_reward[sample_env_idx]
 
@@ -305,15 +305,16 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         # -----------------------------------------------
 
         # Step 4. update obs normalize param
-        obs_rms.update(total_next_obs)
+        # obs_rms.update(total_next_obs)
         # -----------------------------------------------
 
         # Step 5. Training!
-        random_obs_choice = np.random.randint(total_next_obs.shape[0])
-        random_obs = total_next_obs[random_obs_choice].copy()
-        total_next_obs -= obs_rms.mean
-        total_next_obs /= np.sqrt(obs_rms.var)
-        total_next_obs.clip(-5, 5, out=total_next_obs)
+        # random_obs_choice = np.random.randint(total_next_obs.shape[0])
+        # random_obs = total_next_obs[random_obs_choice].copy()
+        total_next_obs /= 255.
+        # total_next_obs -= obs_rms.mean
+        # total_next_obs /= np.sqrt(obs_rms.var)
+        # total_next_obs.clip(-5, 5, out=total_next_obs)
 
         if global_update < num_pretrain_rollouts:
             recon_losses, kld_losses = agent.train_just_vae(total_state / 255., total_next_obs)
@@ -328,15 +329,20 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         
         if global_update % rec_interval == 0:
             with torch.no_grad():
-                random_obs_norm = total_next_obs[random_obs_choice]
-                reconstructed_state = agent.reconstruct(random_obs_norm)
+                # random_obs_norm = total_next_obs[random_obs_choice]
+                # reconstructed_state = agent.reconstruct(random_obs_norm)
 
-                random_obs_norm = (random_obs_norm - random_obs_norm.min()) / (random_obs_norm.max() - random_obs_norm.min())
-                reconstructed_state = (reconstructed_state - reconstructed_state.min()) / (reconstructed_state.max() - reconstructed_state.min())
+                # random_obs_norm = (random_obs_norm - random_obs_norm.min()) / (random_obs_norm.max() - random_obs_norm.min())
+                # reconstructed_state = (reconstructed_state - reconstructed_state.min()) / (reconstructed_state.max() - reconstructed_state.min())
 
-                writer.add_image('Original', random_obs, global_update)
-                writer.add_image('Original Normalized', random_obs_norm, global_update)
-                writer.add_image('Reconstructed Normalized', reconstructed_state, global_update)
+                # writer.add_image('Original', random_obs, global_update)
+                # writer.add_image('Original Normalized', random_obs_norm, global_update)
+
+                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0])]
+                reconstructed_state = agent.reconstruct(random_state)
+
+                writer.add_image('Original', random_state, global_update)
+                writer.add_image('Reconstructed', reconstructed_state, global_update)
 
         if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
