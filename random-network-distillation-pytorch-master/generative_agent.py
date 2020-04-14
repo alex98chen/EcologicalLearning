@@ -47,7 +47,7 @@ class GenerativeAgent(object):
         self.update_proportion = update_proportion
         self.device = torch.device('cuda' if use_cuda else 'cpu')
 
-        self.vae = VAE(input_size, hidden_dim=512)
+        self.vae = VAE(input_size, z_dim=hidden_dim)
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.vae.parameters()),
                                     lr=learning_rate)
         self.vae = self.vae.to(self.device)
