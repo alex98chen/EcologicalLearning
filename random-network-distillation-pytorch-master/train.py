@@ -58,6 +58,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
     num_step = int(default_config['NumStep'])
     num_rollouts = int(default_config['NumRollouts'])
+    num_pretrain_rollouts = int(default_config['NumPretrainRollouts'])
 
     ppo_eps = float(default_config['PPOEps'])
     epoch = int(default_config['Epoch'])
