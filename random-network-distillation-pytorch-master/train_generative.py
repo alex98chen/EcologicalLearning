@@ -54,6 +54,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
 
     num_step = int(default_config['NumStep'])
     num_rollouts = int(default_config['NumRollouts'])
+    num_pretrain_rollouts = int(default_config['NumPretrainRollouts'])
 
     ppo_eps = float(default_config['PPOEps'])
     epoch = int(default_config['Epoch'])
@@ -310,8 +311,12 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         total_next_obs -= obs_rms.mean
         total_next_obs /= np.sqrt(obs_rms.var)
         total_next_obs.clip(-5, 5, out=total_next_obs)
-        recon_losses, kld_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
-                          total_adv, total_next_obs, total_policy)
+
+        if global_update < num_pretrain_rollouts:
+            recon_losses, kld_losses = agent.train_just_vae(total_state / 255., total_next_obs)
+        else:
+            recon_losses, kld_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
+                        total_adv, total_next_obs, total_policy)
 
         writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
         writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
@@ -342,7 +347,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
 
         global_update += 1
 
-        if global_update == num_rollouts:
+        if global_update == num_rollouts + num_pretrain_rollouts:
             print('Finished Training.')
             break
 
@@ -353,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
     parser.add_argument('--rec_interval', help='reconstruct every ___ rollouts', type=int, default=10)
-    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
+    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=100)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint,

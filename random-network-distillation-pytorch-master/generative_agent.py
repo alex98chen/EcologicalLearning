@@ -56,7 +56,7 @@ class GenerativeAgent(object):
     def reconstruct(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        reconstructed = self.vae(state)[0]
+        reconstructed = self.vae(state.unsqueeze(0))[0].squeeze(0)
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -167,6 +167,9 @@ class GenerativeAgent(object):
         sample_range = np.arange(len(s_batch))
         reconstruction_loss = nn.MSELoss(reduction='none')
 
+        recon_losses = np.array([])
+        kld_losses = np.array([])
+
         for i in range(self.epoch):
             np.random.shuffle(sample_range)
             for j in range(int(len(s_batch) / self.batch_size)):
@@ -187,6 +190,9 @@ class GenerativeAgent(object):
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
                 recon_loss = (recon_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+
+                recon_losses = np.append(recon_losses, recon_loss.detach().cpu().numpy())
+                kld_losses = np.append(kld_losses, kld_loss.detach().cpu().numpy())
                 # ---------------------------------------------------------------------------------
 
                 self.optimizer.zero_grad()
@@ -194,3 +200,5 @@ class GenerativeAgent(object):
                 loss.backward()
                 global_grad_norm_(list(self.vae.parameters()))
                 self.optimizer.step()
+
+        return recon_losses, kld_losses
