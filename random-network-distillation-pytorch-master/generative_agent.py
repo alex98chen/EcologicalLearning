@@ -149,3 +149,49 @@ class GenerativeAgent(object):
                 loss.backward()
                 global_grad_norm_(list(self.model.parameters())+list(self.vae.parameters()))
                 self.optimizer.step()
+                
+    def train_just_vae(self, s_batch, target_ext_batch, target_int_batch, y_batch, adv_batch, next_obs_batch, old_policy):
+        s_batch = torch.FloatTensor(s_batch).to(self.device)
+        y_batch = torch.LongTensor(y_batch).to(self.device)
+        next_obs_batch = torch.FloatTensor(next_obs_batch).to(self.device)
+
+        sample_range = np.arange(len(s_batch))
+        reconstruction_loss = nn.MSELoss(reduction='none')
+
+        #with torch.no_grad():
+        #    policy_old_list = torch.stack(old_policy).permute(1, 0, 2).contiguous().view(-1, self.output_size).to(
+        #        self.device)
+
+        #    m_old = Categorical(F.softmax(policy_old_list, dim=-1))
+        #    log_prob_old = m_old.log_prob(y_batch)
+            # ------------------------------------------------------------
+
+        for i in range(self.epoch):
+            np.random.shuffle(sample_range)
+            for j in range(int(len(s_batch) / self.batch_size)):
+                sample_idx = sample_range[self.batch_size * j:self.batch_size * (j + 1)]
+
+                # --------------------------------------------------------------------------------
+                # for generative curiosity (VAE loss)
+                gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
+
+                d = len(gen_next_state.shape)
+                recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
+
+                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
+
+                # TODO: keep this proportion of experience used for VAE update?
+                # Proportion of experience used for VAE update
+                mask = torch.rand(len(recon_loss)).to(self.device)
+                mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
+                recon_loss = (recon_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+                kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+                # ---------------------------------------------------------------------------------
+
+                entropy = m.entropy().mean()
+
+                self.optimizer.zero_grad()
+                loss = recon_loss + kld_loss
+                loss.backward()
+                global_grad_norm_(list(self.vae.parameters()))
+                self.optimizer.step()
