@@ -340,7 +340,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
 
-        if global_update == num_rollouts:
+        if global_update == num_rollouts + num_pretrain_rollouts:
             print('Finished Training.')
             break
 
