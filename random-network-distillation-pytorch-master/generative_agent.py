@@ -29,7 +29,8 @@ class GenerativeAgent(object):
             update_proportion=0.25,
             use_gae=True,
             use_cuda=False,
-            use_noisy_net=False):
+            use_noisy_net=False,
+            hidden_dim=512):
         self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net)
         self.num_env = num_env
         self.output_size = output_size
@@ -46,7 +47,7 @@ class GenerativeAgent(object):
         self.update_proportion = update_proportion
         self.device = torch.device('cuda' if use_cuda else 'cpu')
 
-        self.vae = VAE(input_size)
+        self.vae = VAE(input_size, hidden_dim=512)
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.vae.parameters()),
                                     lr=learning_rate)
         self.vae = self.vae.to(self.device)
