@@ -93,10 +93,11 @@ class GANAgent(object):
 
     def compute_intrinsic_reward(self, obs):
         obs = torch.FloatTensor(obs).to(self.device)
-        embedding = self.vae.representation(obs)
-        reconstructed_embedding = self.vae.representation(self.vae(obs)[0])
-
-        intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
+        #embedding = self.vae.representation(obs)
+        #reconstructed_embedding = self.vae.representation(self.vae(obs)[0]) # why use index[0]
+        reconstructed_img, embedding, reconstructed_embedding = self.netG(obs) 
+        
+        intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2 # Not use reconstructed loss
 
         return intrinsic_reward.detach().cpu().numpy()
 
@@ -198,6 +199,10 @@ class GANAgent(object):
                 self.optimizer_D.step()
                 
                 mean_err_d_per_batch = np.append(mean_err_d_per_batch, mean_err_d.detach().cpu().numpy())
+
+                if mean_err_d.item() < 1e-5:
+                  self.netD.apply(weights_init)
+                  print('Reloading net d')
                 ############# policy update ###############################################
 
                 policy, value_ext, value_int = self.model(s_batch[sample_idx])
