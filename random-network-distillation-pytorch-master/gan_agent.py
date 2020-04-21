@@ -61,7 +61,7 @@ class GANAgent(object):
         self.netG.apply(weights_init)
         self.netD.apply(weights_init)
 
-        self.optimizer_policy = optim.Adam(list(self.model.parameters())),lr=learning_rate)
+        self.optimizer_policy = optim.Adam(list(self.model.parameters()),lr=learning_rate)
         self.optimizer_G = optim.Adam(list(self.netG.parameters()), lr=learning_rate, betas=(0.5,0.999))
         self.optimizer_D = optim.Adam(list(self.netD.parameters()), lr=learning_rate, betas=(0.5,0.999))
 
@@ -161,7 +161,7 @@ class GANAgent(object):
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
                 img_num = len(err_g_con_per_img)
-                mask = torch.rand(img_num)).to(self.device)
+                mask = torch.rand(img_num).to(self.device)
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
                 mean_err_g_adv = (err_g_adv_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 mean_err_g_con = (err_g_con_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
@@ -277,7 +277,7 @@ class GANAgent(object):
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
                 img_num = len(err_g_con_per_img)
-                mask = torch.rand(img_num)).to(self.device)
+                mask = torch.rand(img_num).to(self.device)
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
                 mean_err_g_adv = (err_g_adv_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 mean_err_g_con = (err_g_con_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))

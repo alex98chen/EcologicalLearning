@@ -14,7 +14,7 @@ import torch.optim as optim
 import numpy as np
 import math
 from torch.nn import init
-
+from collections import OrderedDict 
 
 class NoisyLinear(nn.Module):
     """Factorised Gaussian NoisyNet"""
@@ -349,7 +349,7 @@ class Encoder(nn.Module):
         ('paramid-batchnorm3-512', nn.BatchNorm2d(512)),
         ('paramid-relu3-512', nn.LeakyReLU(0.2, inplace=True)), # output is 512 * 4 * 4
 
-        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(512, z_dim, 4, 1, ,0, bias=False)),
+        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(512, z_dim, 4, 1, 0, bias=False)),
         ('paramid-batchnorm4-{0}'.format(z_dim), nn.BatchNorm2d(z_dim)),
         ('paramid_relu4-{0}'.format(z_dim), nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 1 * 1
 
@@ -367,7 +367,7 @@ class Decoder(nn.Module):
 
     # input is z_dim * 1 * 1
     main = nn.Sequential(OrderedDict([
-        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 512, 4, 1, ,0, bias=False)),
+        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 512, 4, 1, 0, bias=False)),
         ('paramid-batchnorm4-512', nn.BatchNorm2d(512)),
         ('paramid-relu4', nn.ReLU(True)),
 
@@ -410,7 +410,7 @@ class NetG(nn.Module):
 
 
 class NetD(nn.Module):
-  def __init__(self,z_dim=1)
+  def __init__(self,z_dim=1):
     super(NetD, self).__init__()
     model = Encoder(z_dim)
     layers = list(model.main.children())

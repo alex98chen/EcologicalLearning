@@ -14,7 +14,7 @@ from torch.multiprocessing import Pipe
 
 from rnd_agent import RNDAgent
 from generative_agent import GenerativeAgent
-from GAN_agent import GANAgent
+from gan_agent import GANAgent
 from envs import *
 from utils import *
 from config import *
@@ -55,9 +55,9 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         target_path = 'models/{}_{}_run{}_target'.format(env_id, train_method, run_id)
     elif train_method == 'generative':
         predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
-    elif train_model == 'GAN':
+    elif train_method == 'GAN':
         netG_path = 'models/{}_{}_run{}_netG'.format(env_id, train_method, run_id)
-        netD_path = 'models/{}_{}_run{}_netD'.format(env_id, train_method, run_id)'
+        netD_path = 'models/{}_{}_run{}_netD'.format(env_id, train_method, run_id)
    
 
     writer = SummaryWriter(comment='_{}_{}_run{}'.format(env_id, train_method, run_id))
