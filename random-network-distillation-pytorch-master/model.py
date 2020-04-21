@@ -278,8 +278,16 @@ class VAE(nn.Module):
             Flatten(),
         )
 
-        self.fc1 = nn.Linear(feature_output, z_dim)
-        self.fc2 = nn.Linear(feature_output, z_dim)
+        self.fc1 = nn.Sequential(
+            nn.Linear(feature_output, z_dim)
+            nn.LeakyReLU(),
+            nn.Linear(z_dim, z_dim)
+        )
+        self.fc2 = nn.Sequential(
+            nn.Linear(feature_output, z_dim)
+            nn.LeakyReLU(),
+            nn.Linear(z_dim, z_dim)
+        )
         self.fc3 = nn.Linear(z_dim, feature_output)
 
         # TODO: write a different decoder???
