@@ -279,12 +279,12 @@ class VAE(nn.Module):
         )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(feature_output, z_dim)
+            nn.Linear(feature_output, z_dim),
             nn.LeakyReLU(),
             nn.Linear(z_dim, z_dim)
         )
         self.fc2 = nn.Sequential(
-            nn.Linear(feature_output, z_dim)
+            nn.Linear(feature_output, z_dim),
             nn.LeakyReLU(),
             nn.Linear(z_dim, z_dim)
         )
