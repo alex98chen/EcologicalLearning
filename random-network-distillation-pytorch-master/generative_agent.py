@@ -1,4 +1,5 @@
 import numpy as np
+import pytorch_ssim
 
 import torch.nn.functional as F
 import torch.nn as nn
@@ -182,7 +183,8 @@ class GenerativeAgent(object):
                 gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
 
                 d = len(gen_next_state.shape)
-                recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
+                recon_loss = -1 * pytorch_ssim.ssim(gen_next_state, next_obs_batch[sample_idx], size_average=False)
+                # recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
 
                 kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
