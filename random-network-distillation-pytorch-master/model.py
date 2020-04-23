@@ -81,7 +81,7 @@ class Flatten(nn.Module):
 
 
 class CnnActorCriticNetwork(nn.Module):
-    def __init__(self, input_size, output_size, use_noisy_net=False):
+    def __init__(self, input_size, output_size, history_size=4, use_noisy_net=False):
         super(CnnActorCriticNetwork, self).__init__()
 
         if use_noisy_net:
@@ -92,7 +92,7 @@ class CnnActorCriticNetwork(nn.Module):
 
         self.feature = nn.Sequential(
             nn.Conv2d(
-                in_channels=4,
+                in_channels=history_size,
                 out_channels=32,
                 kernel_size=8,
                 stride=4),
