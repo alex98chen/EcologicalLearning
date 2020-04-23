@@ -353,11 +353,11 @@ class Encoder(nn.Module):
         ('paramid-batchnorm2-256', nn.BatchNorm2d(256)),
         ('paramid-relu2-256', nn.LeakyReLU(0.2, inplace=True)), # output is 256 * 8 * 8
 
-        ('paramid-conv3-256->512', nn.Conv2d(256, 512, 4, 2, 1, bias=False)),
-        ('paramid-batchnorm3-512', nn.BatchNorm2d(512)),
+        ('paramid-conv3-256->512', nn.Conv2d(256, 256, 4, 2, 1, bias=False)),
+        ('paramid-batchnorm3-512', nn.BatchNorm2d(256)),
         ('paramid-relu3-512', nn.LeakyReLU(0.2, inplace=True)), # output is 512 * 4 * 4
 
-        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(512, z_dim, 4, 1, 0, bias=False)),
+        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(256, z_dim, 4, 1, 0, bias=False)),
         ('paramid-batchnorm4-{0}'.format(z_dim), nn.BatchNorm2d(z_dim)),
         ('paramid_relu4-{0}'.format(z_dim), nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 1 * 1
 
@@ -366,7 +366,8 @@ class Encoder(nn.Module):
     self.main = main
 
   def forward(self, input):
-    output = self.main(input) 
+    output = self.main(input)
+    return output
 
 
 class Decoder(nn.Module):
@@ -375,11 +376,11 @@ class Decoder(nn.Module):
 
     # input is z_dim * 1 * 1
     main = nn.Sequential(OrderedDict([
-        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 512, 4, 1, 0, bias=False)),
-        ('paramid-batchnorm4-512', nn.BatchNorm2d(512)),
+        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 256, 4, 1, 0, bias=False)),
+        ('paramid-batchnorm4-512', nn.BatchNorm2d(256)),
         ('paramid-relu4', nn.ReLU(True)),
 
-        ('paramid-conv3-512->256', nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False)),
+        ('paramid-conv3-512->256', nn.ConvTranspose2d(256, 256, 4, 2, 1, bias=False)),
         ('paramid-batchnorm3-256', nn.BatchNorm2d(256)),
         ('paramid-relu3', nn.ReLU(True)),
 

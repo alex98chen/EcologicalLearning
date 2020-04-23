@@ -1,4 +1,4 @@
-from agents import *
+from gan_agent import *
 from envs import *
 from utils import *
 from config import *
@@ -56,7 +56,7 @@ def main():
     action_prob = float(default_config['ActionProb'])
     life_done = default_config.getboolean('LifeDone')
 
-    agent = RNDAgent
+    agent = GANAgent
 
     if default_config['EnvType'] == 'atari':
         env_type = AtariEnvironment

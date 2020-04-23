@@ -73,6 +73,8 @@ class RNDAgent(object):
 
         target_next_feature = self.rnd.target(next_obs)
         predict_next_feature = self.rnd.predictor(next_obs)
+        print(target_next_feature.shape)
+        print(predict_next_feature.shape)
         intrinsic_reward = (target_next_feature - predict_next_feature).pow(2).sum(1) / 2
 
         return intrinsic_reward.data.cpu().numpy()

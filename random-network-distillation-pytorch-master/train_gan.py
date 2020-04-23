@@ -20,7 +20,7 @@ from utils import *
 from config import *
 
 
-def main(run_id=0, checkpoint=None, save_interval=1000):
+def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
     print({section: dict(config[section]) for section in config.sections()})
 
     train_method = default_config['TrainMethod']
@@ -126,7 +126,8 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         ppo_eps=ppo_eps,
         use_cuda=use_cuda,
         use_gae=use_gae,
-        use_noisy_net=use_noisy_net
+        use_noisy_net=use_noisy_net,
+        update_proportion=1.0
     )
 
     # Load pre-existing model
@@ -183,23 +184,23 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     global_step = 0
 
     # Initialize observation normalizers
-    print('Start to initialize observation normalization parameter...')
-    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    for step in range(num_step * pre_obs_norm_step):
-        actions = np.random.randint(0, output_size, size=(num_worker,))
+    #print('Start to initialize observation normalization parameter...')
+    #next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    #for step in range(num_step * pre_obs_norm_step):
+    #    actions = np.random.randint(0, output_size, size=(num_worker,))
 
-        for parent_conn, action in zip(parent_conns, actions):
-            parent_conn.send(action)
+    #    for parent_conn, action in zip(parent_conns, actions):
+     #       parent_conn.send(action)
 
-        for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr, _ = parent_conn.recv()
-            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+    #    for idx, parent_conn in enumerate(parent_conns):
+    #        s, r, d, rd, lr, _ = parent_conn.recv()
+    #        next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
-        if (step % num_step) == num_step - 1:
-            next_obs = np.stack(next_obs)
-            obs_rms.update(next_obs)
-            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    print('End to initialize...')
+    #    if (step % num_step) == num_step - 1:
+    #        next_obs = np.stack(next_obs)
+    #        obs_rms.update(next_obs)
+     #       next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    #print('End to initialize...')
 
     # Initialize stats dict
     stats = {
@@ -248,10 +249,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             real_dones = np.hstack(real_dones)
 
             # Compute total reward = intrinsic reward + external reward
-            next_obs -= obs_rms.mean
-            next_obs /= np.sqrt(obs_rms.var)
-            next_obs.clip(-5, 5, out=next_obs)
-            intrinsic_reward = agent.compute_intrinsic_reward(next_obs)
+            #next_obs -= obs_rms.mean
+            #next_obs /= np.sqrt(obs_rms.var)
+            #next_obs.clip(-5, 5, out=next_obs)
+            intrinsic_reward = agent.compute_intrinsic_reward(next_obs/255.)
             intrinsic_reward = np.hstack(intrinsic_reward)
             sample_i_rall += intrinsic_reward[sample_env_idx]
 
@@ -301,6 +302,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         mean, std, count = np.mean(total_reward_per_env), np.std(total_reward_per_env), len(total_reward_per_env)
         reward_rms.update_from_moments(mean, std ** 2, count)
 
+
+        writer.add_scalar('data/raw_int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
+        writer.add_scalar('data/raw_int_reward_per_rollout', np.sum(total_int_reward) / num_worker, global_update)
+
         # normalize intrinsic reward
         total_int_reward /= np.sqrt(reward_rms.var)
         writer.add_scalar('data/int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
@@ -333,20 +338,33 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         # -----------------------------------------------
 
         # Step 4. update obs normalize param
-        obs_rms.update(total_next_obs)
+        #obs_rms.update(total_next_obs)
         # -----------------------------------------------
 
         # Step 5. Training!
         total_state /= 255.
-        total_next_obs -= obs_rms.mean
-        total_next_obs /= np.sqrt(obs_rms.var)
-        total_next_obs.clip(-5, 5, out=total_next_obs)
+        #total_next_obs -= obs_rms.mean
+        #total_next_obs /= np.sqrt(obs_rms.var)
+        #total_next_obs.clip(-5, 5, out=total_next_obs)
 
-        agent.train_model(total_state, ext_target, int_target, total_action,
+        if global_update < num_pretrain_rollouts:
+            recon_losses, enc_losses = agent.train_just_gan(total_state/255, total_next_obs)
+        else:
+            recon_losses, enc_losses = agent.train_model(total_state, ext_target, int_target, total_action,
                           total_adv, total_next_obs, total_policy)
 
+        writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
+        writer.add_scalar('data/enc_loss_per_rollout', np.mean(enc_losses), global_update)
+
         global_step += (num_worker * num_step)
-        global_update += 1
+
+        if global_update % rec_interval == 0:
+            with torch.no_grad():
+                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0])]
+                reconstructed_state = agent.reconstruct(random_state)
+
+                writer.add_image('Original', random_state, global_update)
+                writer.add_image('Reconstructed', reconstructed_state, global_update)
         if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
@@ -363,6 +381,8 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
 
+        global_update += 1
+
         if global_update == num_rollouts + num_pretrain_rollouts:
             print('Finished Training.')
             break
@@ -373,8 +393,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
+    parser.add_argument('--rec_interval', help='reconstruct every ___ rollouts', type=int, default=10)
     parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint,
+         rec_interval=args.rec_interval,
          save_interval=args.save_interval)

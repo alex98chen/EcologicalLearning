@@ -1,5 +1,4 @@
 import numpy as np
-import pytorch_ssim
 
 import torch.nn.functional as F
 import torch.nn as nn
@@ -20,7 +19,6 @@ class GenerativeAgent(object):
             num_env,
             num_step,
             gamma,
-            history_size=4,
             lam=0.95,
             learning_rate=1e-4,
             ent_coef=0.01,
@@ -33,7 +31,7 @@ class GenerativeAgent(object):
             use_cuda=False,
             use_noisy_net=False,
             hidden_dim=512):
-        self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net, history_size)
+        self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net)
         self.num_env = num_env
         self.output_size = output_size
         self.input_size = input_size
@@ -81,6 +79,8 @@ class GenerativeAgent(object):
         obs = torch.FloatTensor(obs).to(self.device)
         embedding = self.vae.representation(obs)
         reconstructed_embedding = self.vae.representation(self.vae(obs)[0])
+        print(embedding.shape)
+        print(reconstructed_embedding.shape)
 
         intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
 
@@ -183,8 +183,7 @@ class GenerativeAgent(object):
                 gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
 
                 d = len(gen_next_state.shape)
-                recon_loss = -1 * pytorch_ssim.ssim(gen_next_state, next_obs_batch[sample_idx], size_average=False)
-                # recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
+                recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
 
                 kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 

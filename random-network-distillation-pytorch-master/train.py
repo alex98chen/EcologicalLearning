@@ -13,11 +13,11 @@ from config import *
 def main(run_id=0, checkpoint=None, save_interval=1000):
     print({section: dict(config[section]) for section in config.sections()})
 
-    train_method = default_config['TrainMethod']
+    train_method = default_config['TrainMethod'] # TrainMethod = RND/generative/GAN
 
     # Create environment
-    env_id = default_config['EnvID']
-    env_type = default_config['EnvType']
+    env_id = default_config['EnvID']  # MontezumaRevengeNoFrameskip-v4
+    env_type = default_config['EnvType'] # atari
 
     if env_type == 'mario':
         print('Mario environment not fully implemented - thomaseh')
@@ -25,11 +25,11 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         env = BinarySpaceToDiscreteSpaceEnv(
             gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
     elif env_type == 'atari':
-        env = gym.make(env_id)
+        env = gym.make(env_id) # Create environment
     else:
         raise NotImplementedError
-    input_size = env.observation_space.shape  # 4
-    output_size = env.action_space.n  # 2
+    input_size = env.observation_space.shape  # 4 # Box(210, 160, 3)
+    output_size = env.action_space.n  # 2 # Discrete(18)
 
     if 'Breakout' in env_id:
         output_size -= 1
@@ -49,36 +49,36 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
     writer = SummaryWriter(comment='_{}_{}_run{}'.format(env_id, train_method, run_id))
 
-    use_cuda = default_config.getboolean('UseGPU')
-    use_gae = default_config.getboolean('UseGAE')
-    use_noisy_net = default_config.getboolean('UseNoisyNet')
+    use_cuda = default_config.getboolean('UseGPU') # True
+    use_gae = default_config.getboolean('UseGAE') # True
+    use_noisy_net = default_config.getboolean('UseNoisyNet') # False
 
-    lam = float(default_config['Lambda'])
-    num_worker = int(default_config['NumEnv'])
+    lam = float(default_config['Lambda']) # 0.95
+    num_worker = int(default_config['NumEnv']) # 128
 
-    num_step = int(default_config['NumStep'])
-    num_rollouts = int(default_config['NumRollouts'])
-    num_pretrain_rollouts = int(default_config['NumPretrainRollouts'])
+    num_step = int(default_config['NumStep']) # 128 length of rollout
+    num_rollouts = int(default_config['NumRollouts']) # 0
+    num_pretrain_rollouts = int(default_config['NumPretrainRollouts']) # 200
 
-    ppo_eps = float(default_config['PPOEps'])
-    epoch = int(default_config['Epoch'])
-    mini_batch = int(default_config['MiniBatch'])
-    batch_size = int(num_step * num_worker / mini_batch)
-    learning_rate = float(default_config['LearningRate'])
-    entropy_coef = float(default_config['Entropy'])
-    gamma = float(default_config['Gamma'])
-    int_gamma = float(default_config['IntGamma'])
-    clip_grad_norm = float(default_config['ClipGradNorm'])
-    ext_coef = float(default_config['ExtCoef'])
-    int_coef = float(default_config['IntCoef'])
+    ppo_eps = float(default_config['PPOEps']) # 0.1
+    epoch = int(default_config['Epoch']) # 4
+    mini_batch = int(default_config['MiniBatch']) # 4
+    batch_size = int(num_step * num_worker / mini_batch) # 128 * 128 / 4
+    learning_rate = float(default_config['LearningRate']) # 1e-4
+    entropy_coef = float(default_config['Entropy']) # 0.001
+    gamma = float(default_config['Gamma']) # 0.999
+    int_gamma = float(default_config['IntGamma']) # 0.99
+    clip_grad_norm = float(default_config['ClipGradNorm']) # 0.5
+    ext_coef = float(default_config['ExtCoef']) # 2
+    int_coef = float(default_config['IntCoef']) # 1
 
     sticky_action = default_config.getboolean('StickyAction')
-    action_prob = float(default_config['ActionProb'])
-    life_done = default_config.getboolean('LifeDone')
+    action_prob = float(default_config['ActionProb']) # 0.25
+    life_done = default_config.getboolean('LifeDone') # False
 
     reward_rms = RunningMeanStd()
     obs_rms = RunningMeanStd(shape=(1, 1, 84, 84))
-    pre_obs_norm_step = int(default_config['ObsNormStep'])
+    pre_obs_norm_step = int(default_config['ObsNormStep']) # Number of initial steps for initializing observation normalization # 50
     discounted_reward = RewardForwardFilter(int_gamma)
 
     if train_method == 'RND':
@@ -101,7 +101,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         output_size,
         num_worker,
         num_step,
-        gamma,
+        gamma, # 0.999
         lam=lam,
         learning_rate=learning_rate,
         ent_coef=entropy_coef,
@@ -151,7 +151,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         parent_conns.append(parent_conn)
         child_conns.append(child_conn)
 
-    states = np.zeros([num_worker, 4, 84, 84], dtype='float32')
+    states = np.zeros([num_worker, 4, 84, 84], dtype='float32') # [128, 4, 84, 84]
 
     sample_episode = 0
     sample_rall = 0
@@ -163,22 +163,22 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
     # Initialize observation normalizers
     print('Start to initialize observation normalization parameter...')
-    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    for step in range(num_step * pre_obs_norm_step):
-        actions = np.random.randint(0, output_size, size=(num_worker,))
+    next_obs = np.zeros([num_worker * num_step, 1, 84, 84]) #[128 * 128, 1, 84, 84]
+    for step in range(num_step * pre_obs_norm_step): # 128 * 50
+        actions = np.random.randint(0, output_size, size=(num_worker,)) #[128]
 
         for parent_conn, action in zip(parent_conns, actions):
             parent_conn.send(action)
 
         for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr, _ = parent_conn.recv()
+            s, r, d, rd, lr, _ = parent_conn.recv()#4 steps of observation, reward, force_done, done, log_reward,[self.rall, self.steps]])
             next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
         if (step % num_step) == num_step - 1:
             next_obs = np.stack(next_obs)
             obs_rms.update(next_obs)
             next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    print('End to initialize...')
+    print('End to initialize...') # The detail process, parallel?
 
     # Initialize stats dict
     stats = {
@@ -195,6 +195,8 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         total_reward, total_done, total_next_state, total_action, \
             total_int_reward, total_ext_values, total_int_values, total_policy, \
             total_policy_np = [], [], [], [], [], [], [], [], []
+        global_step += (num_worker * num_step)
+        global_update += 1
 
         # Step 1. n-step rollout (collect data)
         for step in range(num_step):
@@ -205,10 +207,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
             next_obs = np.zeros([num_worker, 1, 84, 84])
             next_states = np.zeros([num_worker, 4, 84, 84])
-            rewards, dones, real_dones, log_rewards = [], [], [], []
+            rewards, dones, real_dones, log_rewards = [], [], [], [] # what's the difference between the dones and real_dones, rewards and log_rewards?
             for idx, parent_conn in enumerate(parent_conns):
-                s, r, d, rd, lr, stat = parent_conn.recv()
-                next_states[idx] = s
+                s, r, d, rd, lr, stat = parent_conn.recv()#4 steps of observation, reward, force_done, done, log_reward,[self.rall, self.steps]])
+                next_states[idx] = s # The next state of idx th worker
                 rewards.append(r)
                 dones.append(d)
                 real_dones.append(rd)
