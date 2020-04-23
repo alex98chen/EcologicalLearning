@@ -19,6 +19,7 @@ class GenerativeAgent(object):
             num_env,
             num_step,
             gamma,
+            history_size=4,
             lam=0.95,
             learning_rate=1e-4,
             ent_coef=0.01,
@@ -31,7 +32,7 @@ class GenerativeAgent(object):
             use_cuda=False,
             use_noisy_net=False,
             hidden_dim=512):
-        self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net)
+        self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net, history_size)
         self.num_env = num_env
         self.output_size = output_size
         self.input_size = input_size
