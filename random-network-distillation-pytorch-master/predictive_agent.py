@@ -129,7 +129,6 @@ class PredictiveAgent(object):
 
                 predict_next_state_feature = self.predictor(next_obs_batch[sample_idx])
                 predict_loss = predict_loss(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
-                import pdb; pdb.set_trace()
 
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
