@@ -72,10 +72,8 @@ class GANAgent(object):
         self.model = self.model.to(self.device)
 
     def reconstruct(self, state):
-        print('state.shape:', state.shape)
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-
         reconstructed = self.netG(state)[0]
         return reconstructed.detach().cpu().numpy()
 

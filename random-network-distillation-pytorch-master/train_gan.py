@@ -348,7 +348,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
         # -----------------------------------------------
 
         # Step 5. Training!
-        total_state /= 255.
+        total_next_obs /= 255.
         #total_next_obs -= obs_rms.mean
         #total_next_obs /= np.sqrt(obs_rms.var)
         #total_next_obs.clip(-5, 5, out=total_next_obs)
@@ -356,7 +356,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
         if global_update < num_pretrain_rollouts:
             recon_losses, enc_losses = agent.train_just_gan(total_state/255, total_next_obs)
         else:
-            recon_losses, enc_losses = agent.train_model(total_state, ext_target, int_target, total_action,
+            recon_losses, enc_losses = agent.train_model(total_state/255, ext_target, int_target, total_action,
                           total_adv, total_next_obs, total_policy)
 
         writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
@@ -368,7 +368,10 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
             with torch.no_grad():
                 random_state = total_next_obs[np.random.randint(total_next_obs.shape[0], size=128)]
                 reconstructed_state = agent.reconstruct(random_state)
-
+                print(np.max(reconstructed_state))
+                print(np.max(random_state))
+                random_state = (random_state * 255).astype(np.uint8)
+                reconstructed_state = (reconstructed_state * 255).astype(np.uint8)
                 writer.add_image('Original', random_state[0], global_update)
                 writer.add_image('Reconstructed', reconstructed_state[0], global_update)
         if global_update % save_interval == 0:
