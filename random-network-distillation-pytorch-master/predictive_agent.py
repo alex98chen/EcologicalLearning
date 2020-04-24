@@ -98,7 +98,7 @@ class PredictiveAgent(object):
 
         sample_range = np.arange(len(s_batch))
         reconstruction_loss = nn.MSELoss(reduction='none')
-        predict_loss = nn.MSELoss(reduction='none')
+        forward_loss = nn.MSELoss(reduction='none')
 
         with torch.no_grad():
             policy_old_list = torch.stack(old_policy).permute(1, 0, 2).contiguous().view(-1, self.output_size).to(
@@ -128,7 +128,7 @@ class PredictiveAgent(object):
                 kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
                 predict_next_state_feature = self.predictor(next_obs_batch[sample_idx])
-                predict_loss = predict_loss(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
+                predict_loss = forward_loss(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
 
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
