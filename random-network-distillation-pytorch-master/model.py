@@ -342,22 +342,22 @@ class Encoder(nn.Module):
 
     # input is 1 * 84 * 84
     main = nn.Sequential(OrderedDict([
-        ('paramid-conv0-1->64', nn.Conv2d(1, 64, 4, 2, 1, bias=False)),
+        ('paramid-conv0-1->64', nn.Conv2d(1, 4, 4, 2, 1, bias=False)),
         ('paramid-relu0-64', nn.LeakyReLU(0.2, inplace=True)), # output is 64 * 42 * 42
 
-        ('paramid-conv1-64->128', nn.Conv2d(64, 128, 4, 2, 1, bias=False)),
-        ('paramid-batchnorm1-128', nn.BatchNorm2d(128)),
+        ('paramid-conv1-64->128', nn.Conv2d(4, 8, 4, 2, 1, bias=False)),
+        ('paramid-batchnorm1-128', nn.BatchNorm2d(8)),
         ('paramid-relu1-128', nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 21 * 21
 
-        ('paramid-conv2-128->256', nn.Conv2d(128, 256, 9, 2, 1, bias=False)),
-        ('paramid-batchnorm2-256', nn.BatchNorm2d(256)),
+        ('paramid-conv2-128->256', nn.Conv2d(8, 16, 9, 2, 1, bias=False)),
+        ('paramid-batchnorm2-256', nn.BatchNorm2d(16)),
         ('paramid-relu2-256', nn.LeakyReLU(0.2, inplace=True)), # output is 256 * 8 * 8
 
-        ('paramid-conv3-256->512', nn.Conv2d(256, 256, 4, 2, 1, bias=False)),
-        ('paramid-batchnorm3-512', nn.BatchNorm2d(256)),
+        ('paramid-conv3-256->512', nn.Conv2d(16, 32, 4, 2, 1, bias=False)),
+        ('paramid-batchnorm3-512', nn.BatchNorm2d(32)),
         ('paramid-relu3-512', nn.LeakyReLU(0.2, inplace=True)), # output is 512 * 4 * 4
 
-        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(256, z_dim, 4, 1, 0, bias=False)),
+        ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(32, z_dim, 4, 1, 0, bias=False)),
         ('paramid-batchnorm4-{0}'.format(z_dim), nn.BatchNorm2d(z_dim)),
         ('paramid_relu4-{0}'.format(z_dim), nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 1 * 1
 
@@ -376,23 +376,23 @@ class Decoder(nn.Module):
 
     # input is z_dim * 1 * 1
     main = nn.Sequential(OrderedDict([
-        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 256, 4, 1, 0, bias=False)),
-        ('paramid-batchnorm4-512', nn.BatchNorm2d(256)),
+        ('paramid-conv4-{0}->512'.format(z_dim), nn.ConvTranspose2d(z_dim, 32, 4, 1, 0, bias=False)),
+        ('paramid-batchnorm4-512', nn.BatchNorm2d(32)),
         ('paramid-relu4', nn.ReLU(True)),
 
-        ('paramid-conv3-512->256', nn.ConvTranspose2d(256, 256, 4, 2, 1, bias=False)),
-        ('paramid-batchnorm3-256', nn.BatchNorm2d(256)),
+        ('paramid-conv3-512->256', nn.ConvTranspose2d(32, 16, 4, 2, 1, bias=False)),
+        ('paramid-batchnorm3-256', nn.BatchNorm2d(16)),
         ('paramid-relu3', nn.ReLU(True)),
 
-        ('paramid-conv2-256->128', nn.ConvTranspose2d(256, 128, 9, 2, 1, bias=False)),
-        ('paramid-batchnorm2-128', nn.BatchNorm2d(128)),
+        ('paramid-conv2-256->128', nn.ConvTranspose2d(16, 8, 9, 2, 1, bias=False)),
+        ('paramid-batchnorm2-128', nn.BatchNorm2d(8)),
         ('paramid-relu2-128', nn.ReLU(True)),
 
-        ('paramid-conv1-128->64', nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False)),
-        ('paramid-batchnorm1-64', nn.BatchNorm2d(64)),
+        ('paramid-conv1-128->64', nn.ConvTranspose2d(8, 4, 4, 2, 1, bias=False)),
+        ('paramid-batchnorm1-64', nn.BatchNorm2d(4)),
         ('paramid-relu1-64', nn.ReLU(True)),
 
-        ('paramid-conv0-64-1', nn.ConvTranspose2d(64, 1, 4, 2, 1, bias=False)),
+        ('paramid-conv0-64-1', nn.ConvTranspose2d(4, 1, 4, 2, 1, bias=False)),
         ('paramid-relu0-64', nn.ReLU(True)),
 
         ('final-sigmoid-1', nn.Sigmoid())

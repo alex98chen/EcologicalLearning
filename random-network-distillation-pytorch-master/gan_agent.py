@@ -72,9 +72,11 @@ class GANAgent(object):
         self.model = self.model.to(self.device)
 
     def reconstruct(self, state):
+        print('state.shape:', state.shape)
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        reconstructed = self.netG(state.unsqueeze(0))[0].squeeze(0)
+
+        reconstructed = self.netG(state)[0]
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -142,19 +144,17 @@ class GANAgent(object):
 
                 # --------------------------------------------------------------------------------
                 # for generative curiosity (GAN loss)
-                #gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
                 ############### netG forward ##############################################
-                gen_next_state, latent_i, latent_o = self.netG(next_obs_batch[sample_idx])
+                with torch.no_grad():
+                    input_next_obs_batch = next_obs_batch[sample_idx]
+                gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
 
-                ############### netD forward ##############################################
-                pred_real, feature_real = self.netD(next_obs_batch[sample_idx])
-                pred_fake, feature_fake = self.netD(gen_next_state.detach())
 
                 ############## netG backward ##############################################
                 self.optimizer_G.zero_grad()
 
-                err_g_adv_per_img = l_adv(self.netD(next_obs_batch[sample_idx])[1], self.netD(gen_next_state)[1]).mean(axis=list(range(1, len(feature_real.shape))))
-                err_g_con_per_img = l_con(next_obs_batch[sample_idx], gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
+                err_g_adv_per_img = l_adv(self.netD(input_next_obs_batch[1]), self.netD(gen_next_state)[1]).mean(axis=list(range(1, 4)))
+                err_g_con_per_img = l_con(input_next_obs_batch, gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
                 err_g_enc_per_img = l_enc(latent_i, latent_o).mean(-1)
 
 
@@ -176,28 +176,33 @@ class GANAgent(object):
                         mean_err_g_con * w_con +\
                         mean_err_g_enc * w_enc
                 mean_err_g.backward()
-                global_grad_norm_(list(self.netG.parameter()))
+                global_grad_norm_(list(self.netG.parameters()))
                 self.optimizer_G.step()
 
                 mean_err_g_adv_per_batch = np.append(mean_err_g_adv_per_batch, mean_err_g_adv.detach().cpu().numpy())
                 mean_err_g_con_per_batch = np.append(mean_err_g_con_per_batch, mean_err_g_con.detach().cpu().numpy())
                 mean_err_g_enc_per_batch = np.append(mean_err_g_enc_per_batch, mean_err_g_enc.detach().cpu().numpy())
 
+                ############### netD forward ##############################################
+                pred_real, feature_real = self.netD(input_next_obs_batch)
+                pred_fake, feature_fake = self.netD(gen_next_state.detach())
+
 
                 ############## netD backward ##############################################
                 self.optimizer_D.zero_grad()
-                
-                real_label = torch.ones_like(pred_real).to(self.device)
-                fake_label = torch.zeros_like(pred_fake).to(self.device)
+                with torch.no_grad():
+                    real_label = torch.ones_like(pred_real).to(self.device)
+                    fake_label = torch.zeros_like(pred_fake).to(self.device)
 
                 err_d_real_per_img = l_bce(pred_real, real_label)
                 err_d_fake_per_img = l_bce(pred_fake, fake_label)
+
                 mean_err_d_real = (err_d_real_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 mean_err_d_fake = (err_d_fake_per_img * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
 
                 mean_err_d = (mean_err_d_real + mean_err_d_fake) / 2
                 mean_err_d.backward()
-                global_grad_norm_(list(self.netD.parameter()))
+                global_grad_norm_(list(self.netD.parameters()))
                 self.optimizer_D.step()
                 
                 mean_err_d_per_batch = np.append(mean_err_d_per_batch, mean_err_d.detach().cpu().numpy())
@@ -231,7 +236,7 @@ class GANAgent(object):
                 loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy 
                 loss.backward()
                 #global_grad_norm_(list(self.model.parameters())+list(self.vae.parameters())) do we need this step
-                global_grad_norm_(list(self.model.parameter()))# or just norm policy
+                global_grad_norm_(list(self.model.parameters()))# or just norm policy
                 self.optimizer_poilicy.step()
 
         return mean_err_g_con_per_batch, mean_err_g_enc_per_batch
@@ -258,20 +263,19 @@ class GANAgent(object):
             for j in range(int(len(s_batch) / self.batch_size)):
                 sample_idx = sample_range[self.batch_size * j:self.batch_size * (j + 1)]
 
+
                 ############### netG forward ##############################################
-                gen_next_state, latent_i, latent_o = self.netG(next_obs_batch[sample_idx])
+                self.netG.train()
 
+                with torch.no_grad():
+                    input_next_obs_batch = next_obs_batch[sample_idx]
+                gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
                 ############### netD forward ##############################################
-                pred_real, feature_real = self.netD(next_obs_batch[sample_idx])
-                pred_fake, feature_fake = self.netD(gen_next_state.detach())
 
-                #d = len(gen_next_state.shape)
-                #recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
-                ############### netG backward #############################################
                 self.optimizer_G.zero_grad()
 
-                err_g_adv_per_img = l_adv(self.netD(next_obs_batch[sample_idx])[1], self.netD(gen_next_state)[1]).mean(axis=list(range(1, len(feature_real.shape))))
-                err_g_con_per_img = l_con(next_obs_batch[sample_idx], gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
+                err_g_adv_per_img = l_adv(self.netD(input_next_obs_batch)[1], self.netD(gen_next_state)[1]).mean(axis=list(range(1, 4)))
+                err_g_con_per_img = l_con(input_next_obs_batch, gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
                 err_g_enc_per_img = l_enc(latent_i, latent_o).mean(-1)
 
                 #kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
@@ -294,20 +298,23 @@ class GANAgent(object):
                         mean_err_g_con * w_con +\
                         mean_err_g_enc * w_enc
                 mean_err_g.backward()
-                global_grad_norm_(list(self.netG.parameter()))
+                global_grad_norm_(list(self.netG.parameters()))
                 self.optimizer_G.step()
 
                 mean_err_g_adv_per_batch = np.append(mean_err_g_adv_per_batch, mean_err_g_adv.detach().cpu().numpy())
                 mean_err_g_con_per_batch = np.append(mean_err_g_con_per_batch, mean_err_g_con.detach().cpu().numpy())
                 mean_err_g_enc_per_batch = np.append(mean_err_g_enc_per_batch, mean_err_g_enc.detach().cpu().numpy())
 
+                ############### netD forward ##############################################
+                pred_real, feature_real = self.netD(input_next_obs_batch)
+                pred_fake, feature_fake = self.netD(gen_next_state.detach())
 
 
                 ############## netD backward ##############################################
                 self.optimizer_D.zero_grad()
-                
-                real_label = torch.ones_like(pred_real).to(self.device)
-                fake_label = torch.zeros_like(pred_fake).to(self.device)
+                with torch.no_grad():
+                    real_label = torch.ones_like(pred_real).to(self.device)
+                    fake_label = torch.zeros_like(pred_fake).to(self.device)
 
                 err_d_real_per_img = l_bce(pred_real, real_label)
                 err_d_fake_per_img = l_bce(pred_fake, fake_label)
@@ -316,7 +323,7 @@ class GANAgent(object):
 
                 mean_err_d = (mean_err_d_real + mean_err_d_fake) / 2
                 mean_err_d.backward()
-                global_grad_norm_(list(self.netD.parameter()))
+                global_grad_norm_(list(self.netD.parameters()))
                 self.optimizer_D.step()
                 
                 mean_err_d_per_batch = np.append(mean_err_d_per_batch, mean_err_d.detach().cpu().numpy())

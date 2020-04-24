@@ -18,6 +18,7 @@ from gan_agent import GANAgent
 from envs import *
 from utils import *
 from config import *
+import os
 
 
 def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
@@ -47,6 +48,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
     env.close()
 
     # Load configuration parameters
+    if not os.path.exists('models'):
+        os.makedirs('models')
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_{}_run{}_model'.format(env_id, train_method, run_id)
@@ -94,6 +97,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
     pre_obs_norm_step = int(default_config['ObsNormStep'])
     discounted_reward = RewardForwardFilter(int_gamma)
 
+    hidden_dim = int(default_config['HiddenDim'])
+
     if train_method == 'RND':
         agent = RNDAgent
     elif train_method == 'generative':
@@ -127,7 +132,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
         use_cuda=use_cuda,
         use_gae=use_gae,
         use_noisy_net=use_noisy_net,
-        update_proportion=1.0
+        update_proportion=1.0,
+        hidden_dim = hidden_dim
     )
 
     # Load pre-existing model
@@ -360,11 +366,11 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
 
         if global_update % rec_interval == 0:
             with torch.no_grad():
-                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0])]
+                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0], size=128)]
                 reconstructed_state = agent.reconstruct(random_state)
 
-                writer.add_image('Original', random_state, global_update)
-                writer.add_image('Reconstructed', reconstructed_state, global_update)
+                writer.add_image('Original', random_state[0], global_update)
+                writer.add_image('Reconstructed', reconstructed_state[0], global_update)
         if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
@@ -374,7 +380,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
                 torch.save(agent.rnd.target.state_dict(), target_path + '_{}.pt'.format(global_update))
             elif train_method == 'generative':
                 torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
-            elif train_methid == 'GAN':
+            elif train_method == 'GAN':
                 torch.save(agent.netG.state_dict(), netG_path + '_{}.pt'.format(global_update))
                 torch.save(agent.netD.state_dict(), netD_path + '_{}.pt'.format(global_update))
             # Save stats to pickle file
