@@ -130,7 +130,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
             agent.vae.load_state_dict(torch.load(vae_path, map_location='cpu'))
             if train_method == 'predictive':
                 agent.predictor.load_state_dict(torch.load(predictor_path, map_location='cpu'))
-       print('load finished!')
+            print('load finished!')
 
     # Create workers to run in environments
     works = []
