@@ -3,7 +3,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Pipe
 
-from rnd_agent import RNDAgent
+from predictive_agent import PredictiveAgent
 from generative_agent import GenerativeAgent
 from envs import *
 from utils import *
@@ -40,8 +40,10 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_{}_run{}_model'.format(env_id, train_method, run_id)
-    predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
-   
+    vae_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
+    if train_method == 'predictive':
+        predictor_path = 'models/{}_{}_run{}_predictor'.format(env_id, train_method, run_id)
+
 
     writer = SummaryWriter(logdir='runs/{}_{}_run{}'.format(env_id, train_method, run_id))
 
@@ -79,8 +81,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
 
     hidden_dim = int(default_config['HiddenDim'])
 
-    if train_method == 'RND':
-        agent = RNDAgent
+    if train_method == 'predictive':
+        agent = PredictiveAgent
     elif train_method == 'generative':
         agent = GenerativeAgent
     else:
@@ -119,12 +121,16 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         print('load model...')
         if use_cuda:
             agent.model.load_state_dict(torch.load(model_path))
-            agent.vae.load_state_dict(torch.load(predictor_path))
+            agent.vae.load_state_dict(torch.load(vae_path))
+            if train_method == 'predictive':
+                agent.predictor.load_state_dict(torch.load(predictor_path))
         else:
             agent.model.load_state_dict(
                 torch.load(model_path, map_location='cpu'))
-            agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
-        print('load finished!')
+            agent.vae.load_state_dict(torch.load(vae_path, map_location='cpu'))
+            if train_method == 'predictive':
+                agent.predictor.load_state_dict(torch.load(predictor_path, map_location='cpu'))
+       print('load finished!')
 
     # Create workers to run in environments
     works = []
@@ -316,14 +322,17 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         # total_next_obs /= np.sqrt(obs_rms.var)
         # total_next_obs.clip(-5, 5, out=total_next_obs)
 
+        predict_losses = None
         if global_update < num_pretrain_rollouts:
             recon_losses, kld_losses = agent.train_just_vae(total_state / 255., total_next_obs)
         else:
-            recon_losses, kld_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
+            recon_losses, kld_losses, predict_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
                         total_adv, total_next_obs, total_policy)
 
         writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
         writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
+        if predict_losses:
+            writer.add_scalar('data/predict_loss_per_rollout', np.mean(predict_losses), global_update)
 
         global_step += (num_worker * num_step)
         
@@ -348,7 +357,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
-            torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
+            torch.save(agent.vae.state_dict(), vae_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:

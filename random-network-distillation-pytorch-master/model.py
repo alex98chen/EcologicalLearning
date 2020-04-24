@@ -248,7 +248,7 @@ class UnFlatten(nn.Module):
     def forward(self, input, shape=(64, 7, 7)):
         return input.view(input.size(0), *shape)
 
-
+        
 class VAE(nn.Module):
     def __init__(self, input_size, z_dim=128):
         super(VAE, self).__init__()
@@ -280,14 +280,11 @@ class VAE(nn.Module):
 
         self.fc1 = nn.Sequential(
             nn.Linear(feature_output, z_dim),
-            nn.LeakyReLU(),
-            nn.Linear(z_dim, z_dim)
         )
         self.fc2 = nn.Sequential(
             nn.Linear(feature_output, z_dim),
-            nn.LeakyReLU(),
-            nn.Linear(z_dim, z_dim)
         )
+
         self.fc3 = nn.Linear(z_dim, feature_output)
 
         # TODO: write a different decoder???
@@ -328,11 +325,53 @@ class VAE(nn.Module):
     def representation(self, x):
         return self.bottleneck(self.encoder(x))[0]
 
-    def forward(self, x):
+    def forward(self, x, return_hidden=False):
         h = self.encoder(x)
         z, mu, logvar = self.bottleneck(h)
         z = self.fc3(z)
-        return self.decoder(z), mu, logvar
+        if return_hidden:
+            return self.decoder(z), mu, logvar, z
+        else:
+            return self.decoder(z), mu, logvar
+
+
+class Predictor(nn.Module):
+    def __init__(self, input_size, z_dim=128):
+        super(Predictor, self).__init__()
+
+        self.input_size = input_size
+
+        feature_output = 7 * 7 * 64
+
+        self.predictor = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=8,
+                stride=4),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=4,
+                stride=2),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1),
+            nn.LeakyReLU(),
+            Flatten(),
+            nn.Linear(feature_output, z_dim),
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim),
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim)
+        )
+
+    def forward(self, x):
+        return self.predictor(x)
 
 
 class Encoder(nn.Module):
