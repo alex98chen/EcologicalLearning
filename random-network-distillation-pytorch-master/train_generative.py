@@ -331,7 +331,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
 
         writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
         writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
-        if predict_losses:
+        if predict_losses is not None:
             writer.add_scalar('data/predict_loss_per_rollout', np.mean(predict_losses), global_update)
 
         global_step += (num_worker * num_step)
