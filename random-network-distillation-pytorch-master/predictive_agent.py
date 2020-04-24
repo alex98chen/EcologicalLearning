@@ -53,8 +53,9 @@ class PredictiveAgent(object):
         self.predictor = Predictor(input_size, z_dim=hidden_dim)
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.vae.parameters()) + list(self.predictor.parameters()),
                                     lr=learning_rate)
-        self.vae = self.vae.to(self.device)
 
+        self.vae = self.vae.to(self.device)
+        self.predictor = self.predictor.to(self.device)
         self.model = self.model.to(self.device)
 
     def reconstruct(self, state):
