@@ -327,10 +327,10 @@ class VAE(nn.Module):
 
     def forward(self, x, return_hidden=False):
         h = self.encoder(x)
-        z, mu, logvar = self.bottleneck(h)
-        z = self.fc3(z)
+        h_z, mu, logvar = self.bottleneck(h)
+        z = self.fc3(h_z)
         if return_hidden:
-            return self.decoder(z), mu, logvar, z
+            return self.decoder(z), mu, logvar, h_z
         else:
             return self.decoder(z), mu, logvar
 
