@@ -358,6 +358,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
             torch.save(agent.vae.state_dict(), vae_path + '_{}.pt'.format(global_update))
+            if train_method == 'predictive':
+                torch.save(agent.predictor.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
