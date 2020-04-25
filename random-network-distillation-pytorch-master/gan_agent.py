@@ -74,7 +74,7 @@ class GANAgent(object):
     def reconstruct(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        reconstructed = self.netG(state)[0]
+        reconstructed = self.netG(state * 255)[0]
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -96,7 +96,7 @@ class GANAgent(object):
         obs = torch.FloatTensor(obs).to(self.device)
         #embedding = self.vae.representation(obs)
         #reconstructed_embedding = self.vae.representation(self.vae(obs)[0]) # why use index[0]
-        reconstructed_img, embedding, reconstructed_embedding = self.netG(obs)
+        reconstructed_img, embedding, reconstructed_embedding = self.netG(obs*255)
         embedding = embedding.squeeze()
         reconstructed_embedding = reconstructed_embedding.squeeze()
         
@@ -144,7 +144,7 @@ class GANAgent(object):
                 # for generative curiosity (GAN loss)
                 ############### netG forward ##############################################
                 with torch.no_grad():
-                    input_next_obs_batch = next_obs_batch[sample_idx]
+                    input_next_obs_batch = next_obs_batch[sample_idx] * 255
                 gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
 
 
@@ -153,7 +153,7 @@ class GANAgent(object):
 
                 err_g_adv_per_img = l_adv(self.netD(input_next_obs_batch[1]), self.netD(gen_next_state)[1]).mean(axis=list(range(1, 4)))
                 err_g_con_per_img = l_con(input_next_obs_batch, gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
-                err_g_enc_per_img = l_enc(latent_i, latent_o).mean(-1)
+                err_g_enc_per_img = l_enc(latent_i, latent_o).mean(axis=list(range(1, len(latent_i))))
 
 
                 # TODO: keep this proportion of experience used for VAE update?
@@ -170,11 +170,14 @@ class GANAgent(object):
                 w_con = 50
                 w_enc = 1
 
+                print('mean_err_g_con', mean_err_g_con)
+                print('mean_err_g_enc', mean_err_g_enc)
+
                 mean_err_g = mean_err_g_adv * w_adv +\
                         mean_err_g_con * w_con +\
                         mean_err_g_enc * w_enc
                 mean_err_g.backward()
-                global_grad_norm_(list(self.netG.parameters()))
+                #global_grad_norm_(list(self.netG.parameters()))
                 self.optimizer_G.step()
 
                 mean_err_g_adv_per_batch = np.append(mean_err_g_adv_per_batch, mean_err_g_adv.detach().cpu().numpy())
@@ -200,7 +203,7 @@ class GANAgent(object):
 
                 mean_err_d = (mean_err_d_real + mean_err_d_fake) / 2
                 mean_err_d.backward()
-                global_grad_norm_(list(self.netD.parameters()))
+                #global_grad_norm_(list(self.netD.parameters()))
                 self.optimizer_D.step()
                 
                 mean_err_d_per_batch = np.append(mean_err_d_per_batch, mean_err_d.detach().cpu().numpy())
@@ -266,15 +269,14 @@ class GANAgent(object):
                 self.netG.train()
 
                 with torch.no_grad():
-                    input_next_obs_batch = next_obs_batch[sample_idx]
+                    input_next_obs_batch = next_obs_batch[sample_idx] * 255
                 gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
-                ############### netD forward ##############################################
 
                 self.optimizer_G.zero_grad()
 
                 err_g_adv_per_img = l_adv(self.netD(input_next_obs_batch)[1], self.netD(gen_next_state)[1]).mean(axis=list(range(1, 4)))
                 err_g_con_per_img = l_con(input_next_obs_batch, gen_next_state).mean(axis=list(range(1, len(gen_next_state.shape))))
-                err_g_enc_per_img = l_enc(latent_i, latent_o).mean(-1)
+                err_g_enc_per_img = l_enc(latent_i, latent_o).mean(axis=list(range(1, len(latent_i.shape))))
 
                 #kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
@@ -292,11 +294,14 @@ class GANAgent(object):
                 w_con = 50
                 w_enc = 1
 
+                print('mean_err_g_con',mean_err_g_con)
+                print('mean_err_g_enc',mean_err_g_enc)
+
                 mean_err_g = mean_err_g_adv * w_adv +\
                         mean_err_g_con * w_con +\
                         mean_err_g_enc * w_enc
                 mean_err_g.backward()
-                global_grad_norm_(list(self.netG.parameters()))
+                #global_grad_norm_(list(self.netG.parameters()))
                 self.optimizer_G.step()
 
                 mean_err_g_adv_per_batch = np.append(mean_err_g_adv_per_batch, mean_err_g_adv.detach().cpu().numpy())
@@ -321,7 +326,7 @@ class GANAgent(object):
 
                 mean_err_d = (mean_err_d_real + mean_err_d_fake) / 2
                 mean_err_d.backward()
-                global_grad_norm_(list(self.netD.parameters()))
+                #global_grad_norm_(list(self.netD.parameters()))
                 self.optimizer_D.step()
                 
                 mean_err_d_per_batch = np.append(mean_err_d_per_batch, mean_err_d.detach().cpu().numpy())

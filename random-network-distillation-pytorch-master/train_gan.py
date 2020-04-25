@@ -368,10 +368,8 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
             with torch.no_grad():
                 random_state = total_next_obs[np.random.randint(total_next_obs.shape[0], size=128)]
                 reconstructed_state = agent.reconstruct(random_state)
-                print(np.max(reconstructed_state))
-                print(np.max(random_state))
                 random_state = (random_state * 255).astype(np.uint8)
-                reconstructed_state = (reconstructed_state * 255).astype(np.uint8)
+                reconstructed_state = (reconstructed_state).astype(np.uint8)
                 writer.add_image('Original', random_state[0], global_update)
                 writer.add_image('Reconstructed', reconstructed_state[0], global_update)
         if global_update % save_interval == 0:
