@@ -8,7 +8,7 @@ import torch.optim as optim
 
 from torch.distributions.categorical import Categorical
 
-from model import CnnActorCriticNetwork, VAE, Predictor
+from model import CnnActorCriticNetwork, Autoencoder, Predictor
 from utils import global_grad_norm_
 
 
@@ -49,7 +49,7 @@ class PredictiveAgent(object):
         self.update_proportion = update_proportion
         self.device = torch.device('cuda' if use_cuda else 'cpu')
 
-        self.vae = VAE(input_size, z_dim=hidden_dim)
+        self.vae = Autoencoder(input_size, z_dim=hidden_dim)
         self.predictor = Predictor(input_size, z_dim=hidden_dim)
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.vae.parameters()) + list(self.predictor.parameters()),
                                     lr=learning_rate)
@@ -61,7 +61,7 @@ class PredictiveAgent(object):
     def reconstruct(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        reconstructed = self.vae(state.unsqueeze(0))[0].squeeze(0)
+        reconstructed = self.vae(state.unsqueeze(0)).squeeze(0)
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -81,7 +81,7 @@ class PredictiveAgent(object):
 
     def compute_intrinsic_reward(self, obs):
         obs = torch.FloatTensor(obs).to(self.device)
-        target_features = self.vae.representation(obs)
+        target_features = self.vae.encode(obs)
         predict_features = self.predictor(obs)
 
         intrinsic_reward = (target_features - predict_features).pow(2).sum(1) / 2
@@ -110,7 +110,6 @@ class PredictiveAgent(object):
 
         
         recon_losses = np.array([])
-        kld_losses = np.array([])
         predict_losses = np.array([])
 
         for i in range(self.epoch):
@@ -120,12 +119,10 @@ class PredictiveAgent(object):
 
                 # --------------------------------------------------------------------------------
                 # for generative curiosity (VAE loss)
-                gen_next_state, mu, logvar, target_next_state_feature = self.vae(next_obs_batch[sample_idx], True)
+                gen_next_state, target_next_state_feature = self.vae(next_obs_batch[sample_idx], True)
 
                 d = len(gen_next_state.shape)
                 recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
-
-                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
                 predict_next_state_feature = self.predictor(next_obs_batch[sample_idx])
                 predict_loss = forward_loss(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
@@ -135,11 +132,9 @@ class PredictiveAgent(object):
                 mask = torch.rand(len(recon_loss)).to(self.device)
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
                 recon_loss = (recon_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
-                kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
                 predict_loss = (predict_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
 
                 recon_losses = np.append(recon_losses, recon_loss.detach().cpu().numpy())
-                kld_losses = np.append(kld_losses, kld_loss.detach().cpu().numpy())
                 predict_losses = np.append(predict_losses, predict_loss.detach().cpu().numpy())
                # ---------------------------------------------------------------------------------
 
@@ -164,12 +159,12 @@ class PredictiveAgent(object):
                 entropy = m.entropy().mean()
 
                 self.optimizer.zero_grad()
-                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + recon_loss + kld_loss + predict_loss
+                loss = actor_loss + 0.5 * critic_loss - self.ent_coef * entropy + recon_loss + predict_loss
                 loss.backward()
                 global_grad_norm_(list(self.model.parameters())+list(self.vae.parameters())+list(self.predictor.parameters()))
                 self.optimizer.step()
 
-        return recon_losses, kld_losses, predict_losses
+        return recon_losses, predict_losses
 
 
     def train_just_vae(self, s_batch,  next_obs_batch):
@@ -180,7 +175,6 @@ class PredictiveAgent(object):
         reconstruction_loss = nn.MSELoss(reduction='none')
 
         recon_losses = np.array([])
-        kld_losses = np.array([])
 
         for i in range(self.epoch):
             np.random.shuffle(sample_range)
@@ -188,30 +182,24 @@ class PredictiveAgent(object):
                 sample_idx = sample_range[self.batch_size * j:self.batch_size * (j + 1)]
 
                 # --------------------------------------------------------------------------------
-                # for generative curiosity (VAE loss)
-                gen_next_state, mu, logvar = self.vae(next_obs_batch[sample_idx])
+                gen_next_state = self.vae(next_obs_batch[sample_idx])
 
                 d = len(gen_next_state.shape)
-                # recon_loss = -1 * pytorch_ssim.ssim(gen_next_state, next_obs_batch[sample_idx], size_average=False)
                 recon_loss = reconstruction_loss(gen_next_state, next_obs_batch[sample_idx]).mean(axis=list(range(1, d)))
-
-                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1)
 
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
                 mask = torch.rand(len(recon_loss)).to(self.device)
                 mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
                 recon_loss = (recon_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
-                kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
 
                 recon_losses = np.append(recon_losses, recon_loss.detach().cpu().numpy())
-                kld_losses = np.append(kld_losses, kld_loss.detach().cpu().numpy())
                 # ---------------------------------------------------------------------------------
 
                 self.optimizer.zero_grad()
-                loss = recon_loss + kld_loss
+                loss = recon_loss
                 loss.backward()
                 global_grad_norm_(list(self.vae.parameters()))
                 self.optimizer.step()
 
-        return recon_losses, kld_losses
+        return recon_losses

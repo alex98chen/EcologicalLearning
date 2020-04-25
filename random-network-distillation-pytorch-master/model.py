@@ -335,6 +335,73 @@ class VAE(nn.Module):
             return self.decoder(z), mu, logvar
 
 
+class Autoencoder(nn.Module):
+    def __init__(self, input_size, z_dim=128):
+        super(Autoencoder, self).__init__()
+
+        self.input_size = input_size
+
+        feature_output = 7 * 7 * 64
+        self.encoder = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=8,
+                stride=4),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=4,
+                stride=2),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1),
+            nn.LeakyReLU(),
+            Flatten(),
+            nn.Linear(feature_output, z_dim),
+            nn.LeakyReLU(),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(z_dim, feature_output),
+            nn.LeakyReLU(),
+            UnFlatten(),
+            nn.ConvTranspose2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1
+            ),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(
+                in_channels=64,
+                out_channels=32,
+                kernel_size=4,
+                stride=2),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(
+                in_channels=32,
+                out_channels=1,
+                kernel_size=8,
+                stride=4),
+            nn.Sigmoid()
+        )
+
+    def encode(self, x):
+        return self.encoder(x)
+
+    def forward(self, x, return_features=False):
+        features = self.encoder(x)
+        if return_features:
+            return self.decoder(features), features
+        else:
+            return self.decoder(features)
+
+
 class Predictor(nn.Module):
     def __init__(self, input_size, z_dim=128):
         super(Predictor, self).__init__()
@@ -364,10 +431,8 @@ class Predictor(nn.Module):
             nn.LeakyReLU(),
             Flatten(),
             nn.Linear(feature_output, z_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(z_dim, z_dim),
-            nn.ReLU(),
-            nn.Linear(z_dim, z_dim)
         )
 
     def forward(self, x):

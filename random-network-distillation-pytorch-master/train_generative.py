@@ -323,14 +323,23 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         # total_next_obs.clip(-5, 5, out=total_next_obs)
 
         predict_losses = None
+        kld_losses = None
         if global_update < num_pretrain_rollouts:
-            recon_losses, kld_losses = agent.train_just_vae(total_state / 255., total_next_obs)
+            if train_method == 'predictive':
+                recon_losses = agent.train_just_vae(total_state / 255., total_next_obs)
+            else:
+                recon_losses, kld_losses = agent.train_just_vae(total_state / 255., total_next_obs)
         else:
-            recon_losses, kld_losses, predict_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
+            if train_method == 'predictive':
+                recon_losses, predict_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
+                        total_adv, total_next_obs, total_policy)
+            else:
+                recon_losses, kld_losses = agent.train_model(total_state / 255., ext_target, int_target, total_action,
                         total_adv, total_next_obs, total_policy)
 
         writer.add_scalar('data/reconstruction_loss_per_rollout', np.mean(recon_losses), global_update)
-        writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
+        if kld_losses is not None:
+            writer.add_scalar('data/kld_loss_per_rollout', np.mean(kld_losses), global_update)
         if predict_losses is not None:
             writer.add_scalar('data/predict_loss_per_rollout', np.mean(predict_losses), global_update)
 
