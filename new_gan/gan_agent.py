@@ -74,7 +74,7 @@ class GANAgent(object):
     def reconstruct(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        reconstructed = self.netG(state)[0]
+        reconstructed = self.netG(state*255)[0]
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -94,7 +94,7 @@ class GANAgent(object):
 
     def compute_intrinsic_reward(self, obs):
         obs = torch.FloatTensor(obs).to(self.device)
-        reconstructed_img, embedding, reconstructed_embedding = self.netG(obs )
+        reconstructed_img, embedding, reconstructed_embedding = self.netG(obs * 255)
         embedding = embedding.squeeze()
         reconstructed_embedding = reconstructed_embedding.squeeze()
 
@@ -141,7 +141,7 @@ class GANAgent(object):
                 # for generative curiosity (GAN loss)
                 ############### netG forward ##############################################
                 with torch.no_grad():
-                    input_next_obs_batch = next_obs_batch[sample_idx]
+                    input_next_obs_batch = next_obs_batch[sample_idx] * 255
 
                 gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
 
@@ -266,7 +266,7 @@ class GANAgent(object):
                 self.netG.train()
 
                 with torch.no_grad():
-                    input_next_obs_batch = next_obs_batch[sample_idx]
+                    input_next_obs_batch = next_obs_batch[sample_idx] * 255
 
                 gen_next_state, latent_i, latent_o = self.netG(input_next_obs_batch)
 

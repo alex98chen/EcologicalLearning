@@ -243,7 +243,7 @@ class NetG(nn.Module):
 
   def forward(self, real):
     latent_i = self.encoder1(real)
-    fake = self.decoder(latent_i)
+    fake = self.decoder(latent_i) * 255
     latent_o = self.encoder2(fake)
     return fake, latent_i, latent_o
 
