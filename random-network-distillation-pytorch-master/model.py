@@ -75,11 +75,6 @@ class NoisyLinear(nn.Module):
             + ', out_features=' + str(self.out_features) + ')'
 
 
-class Flatten(nn.Module):
-    def forward(self, input):
-        return input.view(input.size(0), -1)
-
-
 class CnnActorCriticNetwork(nn.Module):
     def __init__(self, input_size, output_size, use_noisy_net=False, history_size=4):
         super(CnnActorCriticNetwork, self).__init__()
@@ -244,18 +239,20 @@ class RNDModel(nn.Module):
         return predict_feature, target_feature
 
 
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
+
+
 class UnFlatten(nn.Module):
-    def forward(self, input, shape=(64, 7, 7)):
+    def forward(self, input, shape=(512, 5, 5)):
         return input.view(input.size(0), *shape)
 
 
-class VAE(nn.Module):
-    def __init__(self, input_size, z_dim=128):
-        super(VAE, self).__init__()
+class VAEEncoder(nn.Module):
+    def __init__(self):
+        super(VAEEncoder, self).__init__()
 
-        self.input_size = input_size
-
-        feature_output = 7 * 7 * 64
         self.encoder = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
@@ -278,40 +275,95 @@ class VAE(nn.Module):
             Flatten(),
         )
 
+    def forward(self, x):
+        return self.encoder(x)
+
+
+class VAEDecoder(nn.Module):
+    def __init__(self, z_dim=128):
+        super(VAEDecoder, self).__init__()
+
+        feature_output = 5 * 5 * 512
+        self.encoder = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=64,
+                kernel_size=4,
+                stride=2),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=128,
+                kernel_size=4,
+                stride=2),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=128,
+                out_channels=256,
+                kernel_size=4,
+                stride=2),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=256,
+                out_channels=512,
+                kernel_size=4,
+                stride=1),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.1),
+            Flatten(),
+        )
         self.fc1 = nn.Sequential(
             nn.Linear(feature_output, z_dim),
-            nn.LeakyReLU(),
-            nn.Linear(z_dim, z_dim)
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim),
         )
         self.fc2 = nn.Sequential(
             nn.Linear(feature_output, z_dim),
-            nn.LeakyReLU(),
-            nn.Linear(z_dim, z_dim)
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim),
         )
-        self.fc3 = nn.Linear(z_dim, feature_output)
+        self.fc3 = nn.Sequential(
+            nn.Linear(z_dim, feature_output),
+            nn.BatchNorm1d(feature_output),
+            nn.ReLU(),
+        )
 
-        # TODO: write a different decoder???
         self.decoder = nn.Sequential(
             UnFlatten(),
             nn.ConvTranspose2d(
-                in_channels=64,
-                out_channels=64,
-                kernel_size=3,
-                stride=1
-            ),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(
-                in_channels=64,
-                out_channels=32,
+                in_channels=512,
+                out_channels=256,
                 kernel_size=4,
-                stride=2),
-            nn.LeakyReLU(),
+                stride=1,
+            ),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
             nn.ConvTranspose2d(
-                in_channels=32,
+                in_channels=256,
+                out_channels=128,
+                kernel_size=5,
+                stride=2,
+            ),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.ConvTranspose2d(
+                in_channels=128,
+                out_channels=64,
+                kernel_size=5,
+                stride=2,
+            ),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(
+                in_channels=64,
                 out_channels=1,
-                kernel_size=8,
-                stride=4),
-            nn.Sigmoid()
+                kernel_size=4,
+                stride=2,
+            ),
+            nn.Sigmoid(),
         )
 
     def reparameterize(self, mu, logvar):
@@ -320,19 +372,57 @@ class VAE(nn.Module):
         z = mu + std * eps
         return z
 
-    def bottleneck(self, h):
+    def bottleneck(self, x):
+        h = self.encoder(x)
         mu, logvar = self.fc1(h), self.fc2(h)
         z = self.reparameterize(mu, logvar)
         return z, mu, logvar
 
     def representation(self, x):
-        return self.bottleneck(self.encoder(x))[0]
+        return self.bottleneck(x)[0]
+
+    def forward(self, x):
+        z, mu, logvar = self.bottleneck(x)
+        return self.decoder(self.fc3(z)), mu, logvar
+
+
+class VAEDiscriminator(nn.Module):
+    def __init__(self):
+        super(VAEDiscriminator, self).__init__()
+
+        feature_output = 7 * 7 * 64
+        self.encoder = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=8,
+                stride=4),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=4,
+                stride=2),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.1),
+            Flatten(),
+        )
+        self.disc = nn.Sequential(
+            nn.Linear(feature_output, 1),
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
         h = self.encoder(x)
-        z, mu, logvar = self.bottleneck(h)
-        z = self.fc3(z)
-        return self.decoder(z), mu, logvar
+        return self.disc(h)
 
 
 class Encoder(nn.Module):

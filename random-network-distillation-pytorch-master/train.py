@@ -10,7 +10,7 @@ from utils import *
 from config import *
 
 
-def main(run_id=0, checkpoint=None, save_interval=1000):
+def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     print({section: dict(config[section]) for section in config.sections()})
 
     train_method = default_config['TrainMethod']
@@ -40,14 +40,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_{}_run{}_model'.format(env_id, train_method, run_id)
-    if train_method == 'RND':
-        predictor_path = 'models/{}_{}_run{}_pred'.format(env_id, train_method, run_id)
-        target_path = 'models/{}_{}_run{}_target'.format(env_id, train_method, run_id)
-    elif train_method == 'generative':
-        predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
+    # predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
    
 
-    writer = SummaryWriter(comment='_{}_{}_run{}'.format(env_id, train_method, run_id))
+    writer = SummaryWriter(logdir='runs/{}_{}_run{}'.format(env_id, train_method, run_id))
 
     use_cuda = default_config.getboolean('UseGPU')
     use_gae = default_config.getboolean('UseGAE')
@@ -81,6 +77,9 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     pre_obs_norm_step = int(default_config['ObsNormStep'])
     discounted_reward = RewardForwardFilter(int_gamma)
 
+    hidden_dim = int(default_config['HiddenDim'])
+    use_disc = default_config.getboolean('UseDisc')
+
     if train_method == 'RND':
         agent = RNDAgent
     elif train_method == 'generative':
@@ -111,7 +110,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         ppo_eps=ppo_eps,
         use_cuda=use_cuda,
         use_gae=use_gae,
-        use_noisy_net=use_noisy_net
+        use_noisy_net=use_noisy_net,
+        update_proportion=1.0,
+        hidden_dim=hidden_dim,
+        use_disc=use_disc,
     )
 
     # Load pre-existing model
@@ -119,21 +121,11 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         print('load model...')
         if use_cuda:
             agent.model.load_state_dict(torch.load(model_path))
-            if train_method == 'RND':
-                agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
-                agent.rnd.target.load_state_dict(torch.load(target_path))
-            elif train_method == 'generative':
-                agent.vae.load_state_dict(torch.load(predictor_path))
+            # agent.vae.load_state_dict(torch.load(predictor_path))
         else:
             agent.model.load_state_dict(
                 torch.load(model_path, map_location='cpu'))
-            if train_method == 'RND':
-                agent.rnd.predictor.load_state_dict(
-                    torch.load(predictor_path, map_location='cpu'))
-                agent.rnd.target.load_state_dict(
-                    torch.load(target_path, map_location='cpu'))
-            elif train_method == 'generative':
-                agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
+            # agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -162,23 +154,23 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     global_step = 0
 
     # Initialize observation normalizers
-    print('Start to initialize observation normalization parameter...')
-    next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    for step in range(num_step * pre_obs_norm_step):
-        actions = np.random.randint(0, output_size, size=(num_worker,))
+    # print('Start to initialize observation normalization parameter...')
+    # next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    # for step in range(num_step * pre_obs_norm_step):
+    #     actions = np.random.randint(0, output_size, size=(num_worker,))
 
-        for parent_conn, action in zip(parent_conns, actions):
-            parent_conn.send(action)
+    #     for parent_conn, action in zip(parent_conns, actions):
+    #         parent_conn.send(action)
 
-        for idx, parent_conn in enumerate(parent_conns):
-            s, r, d, rd, lr, _ = parent_conn.recv()
-            next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
+    #     for idx, parent_conn in enumerate(parent_conns):
+    #         s, r, d, rd, lr, _ = parent_conn.recv()
+    #         next_obs[(step % num_step) * num_worker + idx, 0, :, :] = s[3, :, :]
 
-        if (step % num_step) == num_step - 1:
-            next_obs = np.stack(next_obs)
-            obs_rms.update(next_obs)
-            next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
-    print('End to initialize...')
+    #     if (step % num_step) == num_step - 1:
+    #         next_obs = np.stack(next_obs)
+    #         obs_rms.update(next_obs)
+    #         next_obs = np.zeros([num_worker * num_step, 1, 84, 84])
+    # print('End to initialize...')
 
     # Initialize stats dict
     stats = {
@@ -198,7 +190,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
         # Step 1. n-step rollout (collect data)
         for step in range(num_step):
-            actions, value_ext, value_int, policy = agent.get_action(states/255.)
+            actions, value_ext, value_int, policy = agent.get_action(states / 255.)
 
             for parent_conn, action in zip(parent_conns, actions):
                 parent_conn.send(action)
@@ -227,10 +219,10 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             real_dones = np.hstack(real_dones)
 
             # Compute total reward = intrinsic reward + external reward
-            next_obs -= obs_rms.mean
-            next_obs /= np.sqrt(obs_rms.var)
-            next_obs.clip(-5, 5, out=next_obs)
-            intrinsic_reward = agent.compute_intrinsic_reward(next_obs)
+            # next_obs -= obs_rms.mean
+            # next_obs /= np.sqrt(obs_rms.var)
+            # next_obs.clip(-5, 5, out=next_obs)
+            intrinsic_reward = agent.compute_intrinsic_reward(next_obs / 255.)
             intrinsic_reward = np.hstack(intrinsic_reward)
             sample_i_rall += intrinsic_reward[sample_env_idx]
 
@@ -280,6 +272,9 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         mean, std, count = np.mean(total_reward_per_env), np.std(total_reward_per_env), len(total_reward_per_env)
         reward_rms.update_from_moments(mean, std ** 2, count)
 
+        writer.add_scalar('data/raw_int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
+        writer.add_scalar('data/raw_int_reward_per_rollout', np.sum(total_int_reward) / num_worker, global_update)
+
         # normalize intrinsic reward
         total_int_reward /= np.sqrt(reward_rms.var)
         writer.add_scalar('data/int_reward_per_epi', np.sum(total_int_reward) / num_worker, sample_episode)
@@ -312,33 +307,60 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         # -----------------------------------------------
 
         # Step 4. update obs normalize param
-        obs_rms.update(total_next_obs)
+        # obs_rms.update(total_next_obs)
         # -----------------------------------------------
 
         # Step 5. Training!
-        total_state /= 255.
-        total_next_obs -= obs_rms.mean
-        total_next_obs /= np.sqrt(obs_rms.var)
-        total_next_obs.clip(-5, 5, out=total_next_obs)
+        # random_obs_choice = np.random.randint(total_next_obs.shape[0])
+        # random_obs = total_next_obs[random_obs_choice].copy()
+        total_next_obs /= 255.
+        # total_next_obs -= obs_rms.mean
+        # total_next_obs /= np.sqrt(obs_rms.var)
+        # total_next_obs.clip(-5, 5, out=total_next_obs)
 
-        agent.train_model(total_state, ext_target, int_target, total_action,
-                          total_adv, total_next_obs, total_policy)
+        losses = agent.train_model(
+            total_state / 255., ext_target, int_target, total_action, total_adv,
+            total_next_obs, total_policy,
+            no_policy=global_update < num_pretrain_rollouts,
+        )
+
+        for k, v in losses.items():
+            writer.add_scalar(k, np.mean(v), global_update)
 
         global_step += (num_worker * num_step)
-        global_update += 1
+        
+        if global_update % rec_interval == 0:
+            with torch.no_grad():
+                agent.eval()
+
+                # random_obs_norm = total_next_obs[random_obs_choice]
+                # reconstructed_state = agent.reconstruct(random_obs_norm)
+
+                # random_obs_norm = (random_obs_norm - random_obs_norm.min()) / (random_obs_norm.max() - random_obs_norm.min())
+                # reconstructed_state = (reconstructed_state - reconstructed_state.min()) / (reconstructed_state.max() - reconstructed_state.min())
+
+                # writer.add_image('Original', random_obs, global_update)
+                # writer.add_image('Original Normalized', random_obs_norm, global_update)
+
+                random_state = total_next_obs[np.random.randint(total_next_obs.shape[0])]
+                reconstructed_state = agent.reconstruct(random_state)
+
+                writer.add_image('Original', random_state, global_update)
+                writer.add_image('Reconstructed', reconstructed_state, global_update)
+
+                agent.train()
+
         if global_update % save_interval == 0:
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
-            if train_method == 'RND':
-                torch.save(agent.rnd.predictor.state_dict(), predictor_path + '_{}.pt'.format(global_update))
-                torch.save(agent.rnd.target.state_dict(), target_path + '_{}.pt'.format(global_update))
-            elif train_method == 'generative':
-                torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
+            # torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
+
+        global_update += 1
 
         if global_update == num_rollouts + num_pretrain_rollouts:
             print('Finished Training.')
@@ -350,8 +372,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
-    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
+    parser.add_argument('--rec_interval', help='reconstruct every ___ rollouts', type=int, default=10)
+    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=100)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint,
+         rec_interval=args.rec_interval,
          save_interval=args.save_interval)
