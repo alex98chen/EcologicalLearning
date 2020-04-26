@@ -375,7 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
     parser.add_argument('--rec_interval', help='reconstruct every ___ rollouts', type=int, default=10)
-    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
+    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=100)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint,
