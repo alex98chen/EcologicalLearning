@@ -184,8 +184,8 @@ class GANAgent(object):
                 self.optimizer_G.step()
 
                 # mean_err_g_adv_per_batch = np.append(mean_err_g_adv_per_batch, mean_err_g_adv.detach().cpu().numpy())
-                # mean_err_g_con_per_batch = np.append(mean_err_g_con_per_batch, mean_err_g_con.detach().cpu().numpy())
-                # mean_err_g_enc_per_batch = np.append(mean_err_g_enc_per_batch, mean_err_g_enc.detach().cpu().numpy())
+                mean_err_g_con_per_batch = np.append(mean_err_g_con_per_batch, mean_err_g_con.detach().cpu().numpy())
+                mean_err_g_enc_per_batch = np.append(mean_err_g_enc_per_batch, mean_err_g_enc.detach().cpu().numpy())
 
                 ############### netD forward ##############################################
                 # pred_real, feature_real = self.netD(input_next_obs_batch)
