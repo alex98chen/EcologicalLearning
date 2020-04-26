@@ -131,14 +131,14 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
             agent.model.load_state_dict(torch.load(model_path))
             if train_method == 'GAN':
                 agent.netG.load_state_dict(torch.load(netG_path))
-                agent.netD.load_state_dict(torch.load(netD_path))
+                # agent.netD.load_state_dict(torch.load(netD_path))
         else:
             agent.model.load_state_dict(
                 torch.load(model_path, map_location='cpu'))
 
             if train_method == 'GAN':
                 agent.netG.load_state_dict(torch.load(netG.path, map_location='cpu'))
-                agent.netD.load_state_dict(torch.load(netD.path, map_location='cpu'))
+                # agent.netD.load_state_dict(torch.load(netD.path, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -357,7 +357,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10,save_interval=1000):
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
             if train_method == 'GAN':
                 torch.save(agent.netG.state_dict(), netG_path + '_{}.pt'.format(global_update))
-                torch.save(agent.netD.state_dict(), netD_path + '_{}.pt'.format(global_update))
+                # torch.save(agent.netD.state_dict(), netD_path + '_{}.pt'.format(global_update))
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
