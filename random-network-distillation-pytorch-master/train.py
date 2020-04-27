@@ -80,6 +80,8 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     pre_obs_norm_step = int(default_config['ObsNormStep'])
     discounted_reward = RewardForwardFilter(int_gamma)
 
+    hidden_dim = int(default_config['HiddenDim'])
+
     if train_method == 'RND':
         agent = RNDAgent
     elif train_method == 'generative':
@@ -110,7 +112,8 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         ppo_eps=ppo_eps,
         use_cuda=use_cuda,
         use_gae=use_gae,
-        use_noisy_net=use_noisy_net
+        use_noisy_net=use_noisy_net,
+        hidden_dim=hidden_dim
     )
 
     # Load pre-existing model

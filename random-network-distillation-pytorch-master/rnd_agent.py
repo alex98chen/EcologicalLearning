@@ -7,7 +7,7 @@ import torch.optim as optim
 
 from torch.distributions.categorical import Categorical
 
-from model import CnnActorCriticNetwork, RNDModel
+from model import CnnActorCriticNetwork, RNDModel, ComplexRNDModel, weights_init
 from utils import global_grad_norm_
 
 
@@ -29,7 +29,8 @@ class RNDAgent(object):
             update_proportion=0.25,
             use_gae=True,
             use_cuda=False,
-            use_noisy_net=False):
+            use_noisy_net=False,
+            hidden_dim=0):
         self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net)
         self.num_env = num_env
         self.output_size = output_size
@@ -45,8 +46,13 @@ class RNDAgent(object):
         self.clip_grad_norm = clip_grad_norm
         self.update_proportion = update_proportion
         self.device = torch.device('cuda' if use_cuda else 'cpu')
+        self.hidden_dim = hidden_dim
 
-        self.rnd = RNDModel(input_size, output_size)
+        if self.hidden_dim:
+            self.rnd = ComplexRNDModel(input_size, output_size, hidden_dim)
+            self.rnd.apply(weights_init)
+        else:
+            self.rnd = RNDModel(input_size, output_size)
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.rnd.predictor.parameters()),
                                     lr=learning_rate)
         self.rnd = self.rnd.to(self.device)

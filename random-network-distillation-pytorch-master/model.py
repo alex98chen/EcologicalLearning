@@ -244,6 +244,67 @@ class RNDModel(nn.Module):
         return predict_feature, target_feature
 
 
+class ComplexRNDModel(nn.Module):
+    def __init__(self, input_size, output_size, z_dim=1024):
+        super(ComplexRNDModel, self).__init__()
+
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.predictor = nn.Sequential(OrderedDict([
+            ('paramid-conv0-1->64', nn.Conv2d(1, 64, 4, 2, 1, bias=False)),
+            ('paramid-relu0-64', nn.LeakyReLU(0.2, inplace=True)), # output is 64 * 42 * 42
+
+            ('paramid-conv1-64->128', nn.Conv2d(64, 128, 4, 2, 1, bias=False)),
+            ('paramid-batchnorm1-128', nn.BatchNorm2d(128)),
+            ('paramid-relu1-128', nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 21 * 21
+
+            ('paramid-conv2-128->256', nn.Conv2d(128, 256, 9, 2, 1, bias=False)),
+            ('paramid-batchnorm2-256', nn.BatchNorm2d(256)),
+            ('paramid-relu2-256', nn.LeakyReLU(0.2, inplace=True)), # output is 256 * 8 * 8
+
+            ('paramid-conv3-256->512', nn.Conv2d(256, 512, 4, 2, 1, bias=False)),
+            ('paramid-batchnorm3-512', nn.BatchNorm2d(512)),
+            ('paramid-relu3-512', nn.LeakyReLU(0.2, inplace=True)), # output is 512 * 4 * 4
+
+            ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(512, z_dim, 4, 1, 0, bias=False)),
+            ('paramid-batchnorm4-{0}'.format(z_dim), nn.BatchNorm2d(z_dim)),
+            ('paramid_relu4-{0}'.format(z_dim), nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 1 * 1
+
+        ]))
+
+        self.predictor = nn.Sequential(OrderedDict([
+            ('paramid-conv0-1->64', nn.Conv2d(1, 64, 4, 2, 1, bias=False)),
+            ('paramid-relu0-64', nn.LeakyReLU(0.2, inplace=True)), # output is 64 * 42 * 42
+
+            ('paramid-conv1-64->128', nn.Conv2d(64, 128, 4, 2, 1, bias=False)),
+            ('paramid-batchnorm1-128', nn.BatchNorm2d(128)),
+            ('paramid-relu1-128', nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 21 * 21
+
+            ('paramid-conv2-128->256', nn.Conv2d(128, 256, 9, 2, 1, bias=False)),
+            ('paramid-batchnorm2-256', nn.BatchNorm2d(256)),
+            ('paramid-relu2-256', nn.LeakyReLU(0.2, inplace=True)), # output is 256 * 8 * 8
+
+            ('paramid-conv3-256->512', nn.Conv2d(256, 512, 4, 2, 1, bias=False)),
+            ('paramid-batchnorm3-512', nn.BatchNorm2d(512)),
+            ('paramid-relu3-512', nn.LeakyReLU(0.2, inplace=True)), # output is 512 * 4 * 4
+
+            ('paramid-conv4-512->{0}'.format(z_dim), nn.Conv2d(512, z_dim, 4, 1, 0, bias=False)),
+            ('paramid-batchnorm4-{0}'.format(z_dim), nn.BatchNorm2d(z_dim)),
+            ('paramid_relu4-{0}'.format(z_dim), nn.LeakyReLU(0.2, inplace=True)), # output is 128 * 1 * 1
+
+        ]))
+
+        for param in self.target.parameters():
+            param.requires_grad = False
+
+    def forward(self, next_obs):
+        target_feature = self.target(next_obs)
+        predict_feature = self.predictor(next_obs)
+
+        return predict_feature, target_feature
+
+
 class UnFlatten(nn.Module):
     def forward(self, input, shape=(64, 7, 7)):
         return input.view(input.size(0), *shape)
