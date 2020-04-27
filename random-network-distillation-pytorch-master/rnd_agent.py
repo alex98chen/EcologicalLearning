@@ -81,7 +81,7 @@ class RNDAgent(object):
         predict_next_feature = self.rnd.predictor(next_obs)
         intrinsic_reward = (target_next_feature - predict_next_feature).pow(2).sum(1) / 2
 
-        return intrinsic_reward.data.cpu().numpy()
+        return intrinsic_reward.squeeze().data.cpu().numpy()
 
     def train_model(self, s_batch, target_ext_batch, target_int_batch, y_batch, adv_batch, next_obs_batch, old_policy):
         s_batch = torch.FloatTensor(s_batch).to(self.device)
