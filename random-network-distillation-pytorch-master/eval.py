@@ -79,9 +79,7 @@ def main(run_id=0, rollout=0):
         raise NotImplementedError
 
     if default_config['EnvType'] == 'atari':
-        env_type = AtariEnvironment
-    elif default_config['EnvType'] == 'mario':
-        env_type = MarioEnvironment
+        env_type = AtariVideoEnvironment
     else:
         raise NotImplementedError
 
@@ -133,9 +131,12 @@ def main(run_id=0, rollout=0):
     works = []
     parent_conns = []
     child_conns = []
+
+    name = '{}_{}_{}'.format(train_method, run_id, rollout)
+
     for idx in range(num_worker):
         parent_conn, child_conn = Pipe()
-        work = env_type(env_id, is_render, idx, child_conn, sticky_action=sticky_action, p=action_prob,
+        work = env_type(env_id, is_render, idx, child_conn, name, sticky_action=sticky_action, p=action_prob,
                         life_done=life_done)
         work.start()
         works.append(work)
@@ -174,6 +175,7 @@ def main(run_id=0, rollout=0):
                 pickle.dump(intrinsic_reward_list, f)
             steps = 0
             rall = 0
+            break
 
 
 if __name__ == '__main__':

@@ -111,6 +111,103 @@ class MontezumaInfoWrapper(gym.Wrapper):
     def reset(self):
         return self.env.reset()
 
+class AtariVideoEnvironment(Environment):
+    def __init__(
+            self,
+            env_id,
+            is_render,
+            env_idx,
+            child_conn,
+            name,
+            history_size=4,
+            h=84,
+            w=84,
+            life_done=True,
+            sticky_action=True,
+            p=0.25):
+        super(AtariVideoEnvironment, self).__init__()
+        self.daemon = True
+        self.env = MaxAndSkipEnv(gym.make(env_id), is_render)
+        if 'Montezuma' in env_id:
+            self.env = MontezumaInfoWrapper(self.env, room_address=3 if 'Montezuma' in env_id else 1)
+        self.env = gym.wrappers.Monitor(self.env, './videos/' + name + '/')
+
+        self.env_id = env_id
+        self.is_render = is_render
+        self.env_idx = env_idx
+        self.steps = 0
+        self.episode = 0
+        self.rall = 0
+        self.recent_rlist = deque(maxlen=100)
+        self.child_conn = child_conn
+
+        self.sticky_action = sticky_action
+        self.last_action = 0
+        self.p = p
+
+        self.history_size = history_size
+        self.history = np.zeros([history_size, h, w])
+        self.h = h
+        self.w = w
+
+        self.reset()
+
+    def run(self):
+        super(AtariVideoEnvironment, self).run()
+        while True:
+            action = self.child_conn.recv()
+
+            if 'Breakout' in self.env_id:
+                action += 1
+
+            # sticky action
+            if self.sticky_action:
+                if np.random.rand() <= self.p:
+                    action = self.last_action
+                self.last_action = action
+
+            s, reward, done, info = self.env.step(action)
+
+            if max_step_per_episode < self.steps:
+                done = True
+
+            log_reward = reward
+            force_done = done
+
+            self.history[:3, :, :] = self.history[1:, :, :]
+            self.history[3, :, :] = self.pre_proc(s)
+
+            self.rall += reward
+            self.steps += 1
+
+            if done:
+                self.recent_rlist.append(self.rall)
+                print("[Episode {}({})] Step: {}  Reward: {}  Recent Reward: {}  Visited Room: [{}]".format(
+                    self.episode, self.env_idx, self.steps, self.rall, np.mean(self.recent_rlist),
+                    info.get('episode', {}).get('visited_rooms', {})))
+
+            self.child_conn.send(
+                [self.history[:, :, :], reward, force_done, done, log_reward,
+                 [self.rall, self.steps]])
+
+    def reset(self):
+        self.last_action = 0
+        self.steps = 0
+        self.episode += 1
+        self.rall = 0
+        s = self.env.reset()
+        self.get_init_state(
+            self.pre_proc(s))
+        return self.history[:, :, :]
+
+    def pre_proc(self, X):
+        X = np.array(Image.fromarray(X).convert('L')).astype('float32')
+        x = cv2.resize(X, (self.h, self.w))
+        return x
+
+    def get_init_state(self, s):
+        for i in range(self.history_size):
+            self.history[i, :, :] = self.pre_proc(s)
 
 class AtariEnvironment(Environment):
     def __init__(
@@ -130,6 +227,7 @@ class AtariEnvironment(Environment):
         self.env = MaxAndSkipEnv(gym.make(env_id), is_render)
         if 'Montezuma' in env_id:
             self.env = MontezumaInfoWrapper(self.env, room_address=3 if 'Montezuma' in env_id else 1)
+
         self.env_id = env_id
         self.is_render = is_render
         self.env_idx = env_idx
@@ -183,7 +281,7 @@ class AtariEnvironment(Environment):
                 print("[Episode {}({})] Step: {}  Reward: {}  Recent Reward: {}  Visited Room: [{}]".format(
                     self.episode, self.env_idx, self.steps, self.rall, np.mean(self.recent_rlist),
                     info.get('episode', {}).get('visited_rooms', {})))
-
+                    
                 self.history = self.reset()
 
             self.child_conn.send(
