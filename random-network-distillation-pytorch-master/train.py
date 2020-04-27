@@ -47,7 +47,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
    
 
-    writer = SummaryWriter(comment='_{}_{}_run{}'.format(env_id, train_method, run_id))
+    writer = SummaryWriter(logdir='runs/{}_{}_run{}'.format(env_id, train_method, run_id))
 
     use_cuda = default_config.getboolean('UseGPU')
     use_gae = default_config.getboolean('UseGAE')
