@@ -33,3 +33,6 @@ lib/
 # IDE files
 .idea
 *.iml
+
+# Videos
+videos/
