@@ -58,7 +58,6 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
 
     num_step = int(default_config['NumStep'])
     num_rollouts = int(default_config['NumRollouts'])
-    num_pretrain_rollouts = int(default_config['NumPretrainRollouts'])
 
     ppo_eps = float(default_config['PPOEps'])
     epoch = int(default_config['Epoch'])
@@ -340,7 +339,7 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
                 pickle.dump(stats, f)
 
-        if global_update == num_rollouts + num_pretrain_rollouts:
+        if global_update == num_rollouts:
             print('Finished Training.')
             break
 
