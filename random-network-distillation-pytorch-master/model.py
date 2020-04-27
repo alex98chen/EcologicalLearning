@@ -249,36 +249,6 @@ class UnFlatten(nn.Module):
         return input.view(input.size(0), *shape)
 
 
-class VAEEncoder(nn.Module):
-    def __init__(self):
-        super(VAEEncoder, self).__init__()
-
-        self.encoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=1,
-                out_channels=32,
-                kernel_size=8,
-                stride=4),
-            nn.LeakyReLU(),
-            nn.Conv2d(
-                in_channels=32,
-                out_channels=64,
-                kernel_size=4,
-                stride=2),
-            nn.LeakyReLU(),
-            nn.Conv2d(
-                in_channels=64,
-                out_channels=64,
-                kernel_size=3,
-                stride=1),
-            nn.LeakyReLU(),
-            Flatten(),
-        )
-
-    def forward(self, x):
-        return self.encoder(x)
-
-
 class VAEDecoder(nn.Module):
     def __init__(self, z_dim=128):
         super(VAEDecoder, self).__init__()
@@ -317,15 +287,11 @@ class VAEDecoder(nn.Module):
         )
         self.fc1 = nn.Sequential(
             nn.Linear(feature_output, z_dim),
+            nn.BatchNorm1d(z_dim),
             nn.ReLU(),
             nn.Linear(z_dim, z_dim),
         )
         self.fc2 = nn.Sequential(
-            nn.Linear(feature_output, z_dim),
-            nn.ReLU(),
-            nn.Linear(z_dim, z_dim),
-        )
-        self.fc3 = nn.Sequential(
             nn.Linear(z_dim, feature_output),
             nn.BatchNorm1d(feature_output),
             nn.ReLU(),
@@ -366,63 +332,12 @@ class VAEDecoder(nn.Module):
             nn.Sigmoid(),
         )
 
-    def reparameterize(self, mu, logvar):
-        std = logvar.mul(0.5).exp_()
-        eps = torch.randn_like(mu)
-        z = mu + std * eps
-        return z
-
-    def bottleneck(self, x):
-        h = self.encoder(x)
-        mu, logvar = self.fc1(h), self.fc2(h)
-        z = self.reparameterize(mu, logvar)
-        return z, mu, logvar
-
     def representation(self, x):
-        return self.bottleneck(x)[0]
+        return self.fc1(self.encoder(x))
 
     def forward(self, x):
-        z, mu, logvar = self.bottleneck(x)
-        return self.decoder(self.fc3(z)), mu, logvar
-
-
-class VAEDiscriminator(nn.Module):
-    def __init__(self):
-        super(VAEDiscriminator, self).__init__()
-
-        feature_output = 7 * 7 * 64
-        self.encoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=1,
-                out_channels=32,
-                kernel_size=8,
-                stride=4),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.1),
-            nn.Conv2d(
-                in_channels=32,
-                out_channels=64,
-                kernel_size=4,
-                stride=2),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.1),
-            nn.Conv2d(
-                in_channels=64,
-                out_channels=64,
-                kernel_size=3,
-                stride=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.1),
-            Flatten(),
-        )
-        self.disc = nn.Sequential(
-            nn.Linear(feature_output, 1),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        h = self.encoder(x)
-        return self.disc(h)
+        h = self.representation(x)
+        return self.decoder(self.fc2(h))
 
 
 class Encoder(nn.Module):

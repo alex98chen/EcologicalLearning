@@ -8,7 +8,7 @@ import torch.optim as optim
 
 from torch.distributions.categorical import Categorical
 
-from model import CnnActorCriticNetwork, VAEEncoder, VAEDecoder, VAEDiscriminator
+from model import CnnActorCriticNetwork, VAEDecoder
 from utils import global_grad_norm_
 
 
@@ -33,7 +33,7 @@ class GenerativeAgent(object):
             use_cuda=False,
             use_noisy_net=False,
             hidden_dim=512,
-            use_disc=False):
+        ):
         self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net, history_size)
         self.num_env = num_env
         self.output_size = output_size
@@ -48,28 +48,12 @@ class GenerativeAgent(object):
         self.ppo_eps = ppo_eps
         self.clip_grad_norm = clip_grad_norm
         self.update_proportion = update_proportion
-        self.use_disc = use_disc
         self.device = torch.device('cuda' if use_cuda else 'cpu')
 
-        # self.vae = VAE(input_size, z_dim=hidden_dim).to(self.device)
-        # self.encoder = VAEEncoder().to(self.device)
         self.decoder = VAEDecoder(z_dim=hidden_dim).to(self.device)
-        # self.vae_optimizer = optim.Adam(
-        #     list(self.encoder.parameters()) + list(self.decoder.parameters()),
-        #     lr=learning_rate,
-        # )
         self.vae_optimizer = optim.Adam(
             self.decoder.parameters(), lr=1e-3,
         )
-        if use_disc:
-            self.disc = VAEDiscriminator().to(self.device)
-            # self.optimizer_D = optim.Adam(
-            #     list(self.encoder.parameters()) + list(self.disc.parameters()),
-            #     lr=learning_rate, betas=(0.5,0.999),
-            # )
-            self.optimizer_D = optim.Adam(
-                self.disc.parameters(), lr=2e-4, betas=(0.5,0.999),
-            )
 
         self.model = self.model.to(self.device)
         self.policy_optimizer = optim.Adam(
@@ -78,21 +62,15 @@ class GenerativeAgent(object):
     def train(self):
         self.model.train()
         self.decoder.train()
-        if self.use_disc:
-            self.disc.train()
 
     def eval(self):
         self.model.eval()
         self.decoder.eval()
-        if self.use_disc:
-            self.disc.eval()
 
     def reconstruct(self, state):
         state = torch.Tensor(state).to(self.device)
         state = state.float()
-        # h = self.encoder(state.unsqueeze(0))
-        # reconstructed = self.decoder(h)[0].squeeze(0)
-        reconstructed = self.decoder(state.unsqueeze(0))[0].squeeze(0)
+        reconstructed = self.decoder(state.unsqueeze(0)).squeeze(0)
         return reconstructed.detach().cpu().numpy()
 
     def get_action(self, state):
@@ -112,14 +90,12 @@ class GenerativeAgent(object):
 
     def compute_intrinsic_reward(self, obs):
         obs = torch.FloatTensor(obs).to(self.device)
-        # h = self.encoder(obs)
-        # embedding = self.decoder.representation(h)
-        # reconstructed_embedding = self.decoder.representation(
-        #     self.encoder(self.decoder(h)[0]))
         embedding = self.decoder.representation(obs)
-        reconstructed_embedding = self.decoder.representation(self.decoder(obs)[0])
-
+        reconstructed_embedding = self.decoder.representation(self.decoder(obs))
         intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
+        # fake_x = self.decoder(obs)
+        # intrinsic_reward = nn.MSELoss(reduction='none')(fake_x, obs).sum(
+        #     axis=list(range(1, len(fake_x.shape))))
 
         return intrinsic_reward.detach().cpu().numpy()
 
@@ -160,22 +136,7 @@ class GenerativeAgent(object):
 
                 # --------------------------------------------------------------------------------
                 # for generative curiosity (VAE loss)
-                # h = self.encoder(input_x)
-                # fake_x, mu, logvar = self.decoder(h)
-                fake_x, mu, logvar = self.decoder(input_x)
-
-                if self.use_disc:
-                    fake_d = self.disc(fake_x.detach())
-                    real_d = self.disc(input_x)
-                    dis_loss = adv_loss(real_d, torch.ones_like(real_d)) + \
-                       adv_loss(fake_d, torch.zeros_like(fake_d))
-                    dis_loss *= 0.01
-
-                    self.optimizer_D.zero_grad()
-                    dis_loss.backward()
-                    self.optimizer_D.step()
-
-                    dis_losses = np.append(dis_losses, dis_loss.detach().cpu().numpy())
+                fake_x = self.decoder(input_x)
 
                 d = len(fake_x.shape)
                 recon_loss = reconstruction_loss(fake_x, input_x)
@@ -184,7 +145,7 @@ class GenerativeAgent(object):
                 #     ).mean(axis=list(range(1, d)))
                 # recon_loss = -1 * pytorch_ssim.ssim(fake_x, input_x, size_average=False)
 
-                kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1).mean()
+                # kld_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(axis=1).mean()
 
                 # TODO: keep this proportion of experience used for VAE update?
                 # Proportion of experience used for VAE update
@@ -194,21 +155,12 @@ class GenerativeAgent(object):
                 # kld_loss = (kld_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
 
                 recon_losses = np.append(recon_losses, recon_loss.detach().cpu().numpy())
-                kld_losses = np.append(kld_losses, kld_loss.detach().cpu().numpy())
+                # kld_losses = np.append(kld_losses, kld_loss.detach().cpu().numpy())
 
                 self.vae_optimizer.zero_grad()
-                loss = recon_loss + kld_loss
-                if self.use_disc:
-                    fake_d = self.disc(fake_x)
-                    gen_loss = adv_loss(fake_d, torch.ones_like(fake_d)) * 0.01
-                    loss += gen_loss
-                    gen_losses = np.append(gen_losses, gen_loss.detach().cpu().numpy())
+                loss = recon_loss
                 loss.backward()
-                if self.use_disc:
-                    params = list(self.decoder.parameters()) + list(self.disc.parameters())
-                else:
-                    params = list(self.decoder.parameters())
-                global_grad_norm_(params)
+                global_grad_norm_(list(self.decoder.parameters()))
                 self.vae_optimizer.step()
 
                 if no_policy:
@@ -241,9 +193,9 @@ class GenerativeAgent(object):
                 global_grad_norm_(self.model.parameters())
                 self.policy_optimizer.step()
 
-        return {
+        outputs = {
             'data/reconstruction_loss_per_rollout': recon_losses,
-            'data/kld_loss_per_rollout': kld_losses,
-            'data/dis_loss_per_rollout': dis_losses,
-            'data/gen_loss_per_rollout': gen_losses,
         }
+        if len(kld_losses) != 0:
+            outputs['data/kld_loss_per_rollout'] = kld_losses
+        return outputs

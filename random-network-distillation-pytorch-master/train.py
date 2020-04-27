@@ -40,7 +40,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     is_load_model = checkpoint is not None
     is_render = False
     model_path = 'models/{}_{}_run{}_model'.format(env_id, train_method, run_id)
-    # predictor_path = 'models/{}_{}_run{}_vae'.format(env_id, train_method, run_id)
+    predictor_path = 'models/{}_{}_run{}_ae'.format(env_id, train_method, run_id)
    
 
     writer = SummaryWriter(logdir='runs/{}_{}_run{}'.format(env_id, train_method, run_id))
@@ -78,7 +78,6 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     discounted_reward = RewardForwardFilter(int_gamma)
 
     hidden_dim = int(default_config['HiddenDim'])
-    use_disc = default_config.getboolean('UseDisc')
 
     if train_method == 'RND':
         agent = RNDAgent
@@ -113,19 +112,20 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
         use_noisy_net=use_noisy_net,
         update_proportion=1.0,
         hidden_dim=hidden_dim,
-        use_disc=use_disc,
     )
 
     # Load pre-existing model
     if is_load_model:
         print('load model...')
+        model_path_ = model_path + '_{}.pt'.format(checkpoint)
+        predictor_path_ = predictor_path + '_{}.pt'.format(checkpoint)
         if use_cuda:
-            agent.model.load_state_dict(torch.load(model_path))
-            # agent.vae.load_state_dict(torch.load(predictor_path))
+            agent.model.load_state_dict(torch.load(model_path_))
+            agent.decoder.load_state_dict(torch.load(predictor_path_))
         else:
             agent.model.load_state_dict(
-                torch.load(model_path, map_location='cpu'))
-            # agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
+                torch.load(model_path_, map_location='cpu'))
+            agent.decoder.load_state_dict(torch.load(predictor_path_, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -354,7 +354,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
             print('Saving model at global step={}, num rollouts={}.'.format(
                 global_step, global_update))
             torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
-            # torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
+            torch.save(agent.decoder.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
