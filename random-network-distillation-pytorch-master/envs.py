@@ -270,6 +270,7 @@ class AtariEnvironment(Environment):
 
             temp_rall = self.rall
             temp_steps = self.steps
+            temp_rooms = info.get('episode', {}).get('visited_rooms', {})
 
             if done:
                 self.recent_rlist.append(self.rall)
@@ -281,7 +282,7 @@ class AtariEnvironment(Environment):
 
             self.child_conn.send(
                 [self.history[:, :, :], reward, force_done, done, log_reward,
-                 [temp_rall, temp_steps]])
+                 [temp_rall, temp_steps, temp_rooms]])
 
     def reset(self):
         self.last_action = 0

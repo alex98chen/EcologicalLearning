@@ -176,6 +176,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
     stats = {
         'total_reward': [],
         'ep_length': [],
+        'rooms_visited': [],
         'num_updates': [],
         'frames_seen': [],
     }
@@ -211,6 +212,7 @@ def main(run_id=0, checkpoint=None, rec_interval=10, save_interval=100):
                 if rd:
                     stats['total_reward'].append(stat[0])
                     stats['ep_length'].append(stat[1])
+                    stats['rooms_visited'].append(stat[2])
                     stats['num_updates'].append(global_update)
                     stats['frames_seen'].append(global_step)
 
