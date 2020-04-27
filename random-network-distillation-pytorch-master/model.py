@@ -273,7 +273,7 @@ class ComplexRNDModel(nn.Module):
 
         ]))
 
-        self.predictor = nn.Sequential(OrderedDict([
+        self.target = nn.Sequential(OrderedDict([
             ('paramid-conv0-1->64', nn.Conv2d(1, 64, 4, 2, 1, bias=False)),
             ('paramid-relu0-64', nn.LeakyReLU(0.2, inplace=True)), # output is 64 * 42 * 42
 
