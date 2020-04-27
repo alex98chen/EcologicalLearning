@@ -1,4 +1,6 @@
-from gan_agent import *
+from gan_agent import GANAgent
+from rnd_agent import RNDAgent
+from generative_agent import GenerativeAgent
 from envs import *
 from utils import *
 from config import *
@@ -10,10 +12,12 @@ import numpy as np
 import pickle
 
 
-def main():
+def main(run_id=0, rollout=0):
     print({section: dict(config[section]) for section in config.sections()})
     env_id = default_config['EnvID']
     env_type = default_config['EnvType']
+
+    train_method = default_config['TrainMethod']
 
     if env_type == 'mario':
         env = BinarySpaceToDiscreteSpaceEnv(gym_super_mario_bros.make(env_id), COMPLEX_MOVEMENT)
@@ -30,9 +34,16 @@ def main():
     env.close()
 
     is_render = True
-    model_path = 'models/{}.model'.format(env_id)
-    predictor_path = 'models/{}.pred'.format(env_id)
-    target_path = 'models/{}.target'.format(env_id)
+    model_path = 'models/{}_{}_run{}_model_{}.pt'.format(env_id, train_method, run_id, rollout)
+    if train_method == 'RND':
+        model_path = 'models/{}_run{}_model_{}.pt'.format(env_id, run_id, rollout)
+        predictor_path = 'models/{}_run{}_pred_{}.pt'.format(env_id, run_id, rollout)
+        target_path = 'models/{}_run{}_target_{}.pt'.format(env_id, run_id, rollout)
+    elif train_method == 'generative':
+        predictor_path = 'models/{}_{}_run{}_vae_{}.pt'.format(env_id, train_method, run_id, rollout)
+    elif train_method == 'gan':
+        netg_path = 'models/{}_{}_run{}_netg_{}.pt'.format(env_id, train_method, run_id, rollout)
+        netd_path = 'models/{}_{}_run{}_netd_{}.pt'.format(env_id, train_method, run_id, rollout)
 
     use_cuda = False
     use_gae = default_config.getboolean('UseGAE')
@@ -56,7 +67,16 @@ def main():
     action_prob = float(default_config['ActionProb'])
     life_done = default_config.getboolean('LifeDone')
 
-    agent = GANAgent
+    hidden_dim = int(default_config['HiddenDim'])
+
+    if train_method == 'RND':
+        agent = RNDAgent
+    elif train_method == 'generative':
+        agent = GenerativeAgent
+    elif train_method == 'GAN':
+        agent = GANAgent
+    else:
+        raise NotImplementedError
 
     if default_config['EnvType'] == 'atari':
         env_type = AtariEnvironment
@@ -80,19 +100,35 @@ def main():
         ppo_eps=ppo_eps,
         use_cuda=use_cuda,
         use_gae=use_gae,
-        use_noisy_net=use_noisy_net
+        use_noisy_net=use_noisy_net,
+        hidden_dim = hidden_dim
     )
 
-    print('Loading Pre-trained model....')
+    print('load model...')
     if use_cuda:
         agent.model.load_state_dict(torch.load(model_path))
-        agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
-        agent.rnd.target.load_state_dict(torch.load(target_path))
+        if train_method == 'RND':
+            agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
+            agent.rnd.target.load_state_dict(torch.load(target_path))
+        elif train_method == 'generative':
+            agent.vae.load_state_dict(torch.load(predictor_path))
+        elif train_method == 'GAN':
+            agent.netG.load_state_dict(torch.load(netg_path))
+            agent.netD.load_state_dict(torch.load(netd_path))
     else:
-        agent.model.load_state_dict(torch.load(model_path, map_location='cpu'))
-        agent.rnd.predictor.load_state_dict(torch.load(predictor_path, map_location='cpu'))
-        agent.rnd.target.load_state_dict(torch.load(target_path, map_location='cpu'))
-    print('End load...')
+        agent.model.load_state_dict(
+            torch.load(model_path, map_location='cpu'))
+        if train_method == 'RND':
+            agent.rnd.predictor.load_state_dict(
+                torch.load(predictor_path, map_location='cpu'))
+            agent.rnd.target.load_state_dict(
+                torch.load(target_path, map_location='cpu'))
+        elif train_method == 'generative':
+            agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
+        elif train_method == 'GAN':
+            agent.netG.load_state_dict(torch.load(netg_path, map_location='cpu'))
+            agent.netD.load_state_dict(torch.load(netd_path, map_location='cpu'))
+    print('load finished!')
 
     works = []
     parent_conns = []
@@ -121,7 +157,7 @@ def main():
 
         next_states, rewards, dones, real_dones, log_rewards, next_obs = [], [], [], [], [], []
         for parent_conn in parent_conns:
-            s, r, d, rd, lr = parent_conn.recv()
+            s, r, d, rd, lr, _ = parent_conn.recv()
             rall += r
             next_states = s.reshape([1, 4, 84, 84])
             next_obs = s[3, :, :].reshape([1, 1, 84, 84])
@@ -141,4 +177,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--run_id', help='run identifier', type=int, default=0)
+    parser.add_argument('--rollout', help='rollout identifier', type=int, default=0)
+    args = parser.parse_args()
+    main(run_id=args.run_id,
+         rollout=args.rollout)

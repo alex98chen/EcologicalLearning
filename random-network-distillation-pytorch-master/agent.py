@@ -29,7 +29,8 @@ class RNDAgent(object):
             update_proportion=0.25,
             use_gae=True,
             use_cuda=False,
-            use_noisy_net=False):
+            use_noisy_net=False,
+            **kwargs):
         self.model = CnnActorCriticNetwork(input_size, output_size, use_noisy_net)
         self.num_env = num_env
         self.output_size = output_size
