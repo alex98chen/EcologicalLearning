@@ -90,12 +90,12 @@ class GenerativeAgent(object):
 
     def compute_intrinsic_reward(self, obs):
         obs = torch.FloatTensor(obs).to(self.device)
-        embedding = self.decoder.representation(obs)
-        reconstructed_embedding = self.decoder.representation(self.decoder(obs))
-        intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
-        # fake_x = self.decoder(obs)
-        # intrinsic_reward = nn.MSELoss(reduction='none')(fake_x, obs).sum(
-        #     axis=list(range(1, len(fake_x.shape))))
+        # embedding = self.decoder.representation(obs)
+        # reconstructed_embedding = self.decoder.representation(self.decoder(obs))
+        # intrinsic_reward = (embedding - reconstructed_embedding).pow(2).sum(1) / 2
+        fake_x = self.decoder(obs)
+        intrinsic_reward = nn.MSELoss(reduction='none')(fake_x, obs).sum(
+            axis=list(range(1, len(fake_x.shape))))
 
         return intrinsic_reward.detach().cpu().numpy()
 

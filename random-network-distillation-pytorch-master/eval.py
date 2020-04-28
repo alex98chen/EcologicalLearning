@@ -1,4 +1,5 @@
-from agents import *
+from rnd_agent import RNDAgent
+from generative_agent import GenerativeAgent
 from envs import *
 from utils import *
 from config import *
@@ -30,9 +31,8 @@ def main():
     env.close()
 
     is_render = True
-    model_path = 'models/{}.model'.format(env_id)
-    predictor_path = 'models/{}.pred'.format(env_id)
-    target_path = 'models/{}.target'.format(env_id)
+    model_path = 'models/MontezumaRevengeNoFrameskip-v4_generative_run23_model'
+    predictor_path = 'models/MontezumaRevengeNoFrameskip-v4_generative_run23_ae'
 
     use_cuda = False
     use_gae = default_config.getboolean('UseGAE')
@@ -56,7 +56,7 @@ def main():
     action_prob = float(default_config['ActionProb'])
     life_done = default_config.getboolean('LifeDone')
 
-    agent = RNDAgent
+    agent = GenerativeAgent
 
     if default_config['EnvType'] == 'atari':
         env_type = AtariEnvironment
@@ -84,14 +84,15 @@ def main():
     )
 
     print('Loading Pre-trained model....')
+    model_path_ = model_path + '_{}.pt'.format(1400)
+    predictor_path_ = predictor_path + '_{}.pt'.format(1400)
     if use_cuda:
-        agent.model.load_state_dict(torch.load(model_path))
-        agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
-        agent.rnd.target.load_state_dict(torch.load(target_path))
+        agent.model.load_state_dict(torch.load(model_path_))
+        agent.decoder.load_state_dict(torch.load(predictor_path_))
     else:
-        agent.model.load_state_dict(torch.load(model_path, map_location='cpu'))
-        agent.rnd.predictor.load_state_dict(torch.load(predictor_path, map_location='cpu'))
-        agent.rnd.target.load_state_dict(torch.load(target_path, map_location='cpu'))
+        agent.model.load_state_dict(
+            torch.load(model_path_, map_location='cpu'))
+        agent.decoder.load_state_dict(torch.load(predictor_path_, map_location='cpu'))
     print('End load...')
 
     works = []

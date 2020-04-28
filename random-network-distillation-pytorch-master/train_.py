@@ -10,7 +10,7 @@ from utils import *
 from config import *
 
 
-def main(run_id=0, checkpoint=None, save_interval=1000):
+def main(run_id=0, checkpoint=None, save_interval=100):
     print({section: dict(config[section]) for section in config.sections()})
 
     train_method = default_config['TrainMethod']
@@ -117,23 +117,26 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
     # Load pre-existing model
     if is_load_model:
         print('load model...')
+        model_path_ = model_path + '_{}.pt'.format(checkpoint)
+        predictor_path_ = predictor_path + '_{}.pt'.format(checkpoint)
+        target_path_ = target_path + '_{}.pt'.format(checkpoint)
         if use_cuda:
-            agent.model.load_state_dict(torch.load(model_path))
+            agent.model.load_state_dict(torch.load(model_path_))
             if train_method == 'RND':
-                agent.rnd.predictor.load_state_dict(torch.load(predictor_path))
-                agent.rnd.target.load_state_dict(torch.load(target_path))
+                agent.rnd.predictor.load_state_dict(torch.load(predictor_path_))
+                agent.rnd.target.load_state_dict(torch.load(target_path_))
             elif train_method == 'generative':
-                agent.vae.load_state_dict(torch.load(predictor_path))
+                agent.vae.load_state_dict(torch.load(predictor_path_))
         else:
             agent.model.load_state_dict(
-                torch.load(model_path, map_location='cpu'))
+                torch.load(model_path_, map_location='cpu'))
             if train_method == 'RND':
                 agent.rnd.predictor.load_state_dict(
-                    torch.load(predictor_path, map_location='cpu'))
+                    torch.load(predictor_path_, map_location='cpu'))
                 agent.rnd.target.load_state_dict(
-                    torch.load(target_path, map_location='cpu'))
+                    torch.load(target_path_, map_location='cpu'))
             elif train_method == 'generative':
-                agent.vae.load_state_dict(torch.load(predictor_path, map_location='cpu'))
+                agent.vae.load_state_dict(torch.load(predictor_path_, map_location='cpu'))
         print('load finished!')
 
     # Create workers to run in environments
@@ -333,8 +336,6 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
             if train_method == 'RND':
                 torch.save(agent.rnd.predictor.state_dict(), predictor_path + '_{}.pt'.format(global_update))
                 torch.save(agent.rnd.target.state_dict(), target_path + '_{}.pt'.format(global_update))
-            elif train_method == 'generative':
-                torch.save(agent.vae.state_dict(), predictor_path + '_{}.pt'.format(global_update))
 
             # Save stats to pickle file
             with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, global_update),'wb') as f:
@@ -343,6 +344,15 @@ def main(run_id=0, checkpoint=None, save_interval=1000):
         if global_update == num_rollouts + num_pretrain_rollouts:
             print('Finished Training.')
             break
+
+    torch.save(agent.model.state_dict(), model_path + "_{}.pt".format(global_update))
+    if train_method == 'RND':
+        torch.save(agent.rnd.predictor.state_dict(), predictor_path + '_{}.pt'.format('final'))
+        torch.save(agent.rnd.target.state_dict(), target_path + '_{}.pt'.format('final'))
+
+    # Save stats to pickle file
+    with open('models/{}_{}_run{}_stats_{}.pkl'.format(env_id, train_method, run_id, 'final'),'wb') as f:
+        pickle.dump(stats, f)
 
 
 if __name__ == '__main__':

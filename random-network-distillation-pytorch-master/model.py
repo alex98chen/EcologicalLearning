@@ -245,7 +245,7 @@ class Flatten(nn.Module):
 
 
 class UnFlatten(nn.Module):
-    def forward(self, input, shape=(256, 5, 5)):
+    def forward(self, input, shape=(512, 5, 5)):
         return input.view(input.size(0), *shape)
 
 
@@ -253,17 +253,10 @@ class VAEDecoder(nn.Module):
     def __init__(self, z_dim=128):
         super(VAEDecoder, self).__init__()
 
-        feature_output = 5 * 5 * 256
+        feature_output = 5 * 5 * 512
         self.encoder = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
-                out_channels=32,
-                kernel_size=4,
-                stride=2),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.1),
-            nn.Conv2d(
-                in_channels=32,
                 out_channels=64,
                 kernel_size=4,
                 stride=2),
@@ -280,8 +273,15 @@ class VAEDecoder(nn.Module):
                 in_channels=128,
                 out_channels=256,
                 kernel_size=4,
-                stride=1),
+                stride=2),
             nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(
+                in_channels=256,
+                out_channels=512,
+                kernel_size=4,
+                stride=1),
+            nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
             Flatten(),
         )
@@ -300,10 +300,18 @@ class VAEDecoder(nn.Module):
         self.decoder = nn.Sequential(
             UnFlatten(),
             nn.ConvTranspose2d(
-                in_channels=256,
-                out_channels=128,
+                in_channels=512,
+                out_channels=256,
                 kernel_size=4,
                 stride=1,
+            ),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=128,
+                kernel_size=5,
+                stride=2,
             ),
             nn.BatchNorm2d(128),
             nn.ReLU(),
@@ -317,14 +325,6 @@ class VAEDecoder(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(
                 in_channels=64,
-                out_channels=32,
-                kernel_size=5,
-                stride=2,
-            ),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                in_channels=32,
                 out_channels=1,
                 kernel_size=4,
                 stride=2,
