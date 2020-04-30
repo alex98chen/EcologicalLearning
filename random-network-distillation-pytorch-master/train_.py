@@ -187,6 +187,7 @@ def main(run_id=0, checkpoint=None, save_interval=100):
     stats = {
         'total_reward': [],
         'ep_length': [],
+        'rooms_visited': [],
         'num_updates': [],
         'frames_seen': [],
     }
@@ -222,6 +223,7 @@ def main(run_id=0, checkpoint=None, save_interval=100):
                 if rd:
                     stats['total_reward'].append(stat[0])
                     stats['ep_length'].append(stat[1])
+                    stats['rooms_visited'].append(stat[2])
                     stats['num_updates'].append(global_update)
                     stats['frames_seen'].append(global_step)
 
@@ -360,7 +362,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run_id', help='run identifier (logging)', type=int, default=0)
     parser.add_argument('--checkpoint', help='checkpoint run identifier', type=int, default=None)
-    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=1000)
+    parser.add_argument('--save_interval', help='save every ___ rollouts', type=int, default=100)
     args = parser.parse_args()
     main(run_id=args.run_id,
          checkpoint=args.checkpoint,
